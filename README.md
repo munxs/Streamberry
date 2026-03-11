@@ -22,8 +22,10 @@ streamberry/
 ├── README.md
 ├── .gitignore
 ├── src/
-│   ├── Streamberry.css      # Full theme stylesheet
-│   └── Streamberry.js       # Bottom nav bar + UI enhancements
+│   ├── css
+│   	└── Streamberry.css      # Full theme stylesheet
+│   ├── js
+│   	└── Streamberry.js       # Bottom nav bar + UI enhancements
 └── docs/
     └── installation.md      # Step-by-step setup guide
 \`\`\`
