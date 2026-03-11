@@ -83,6 +83,12 @@ Key design tokens are defined at the top of `Streamberry.css` inside `:root { }`
 
 ---
 
+## 🙏 Credits
+
+Streamberry was inspired by [ElegantFin](https://github.com/lscambo13/ElegantFin) by [@lscambo13](https://github.com/lscambo13). Original concept and design direction credit goes to that project.
+
+---
+
 ## 📄 License
 
 MIT — feel free to use and modify for personal use.
