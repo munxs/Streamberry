@@ -2613,3 +2613,483 @@ body.sbJellyseerrOpen { overflow: hidden !important; }
 .layout-mobile .headerHomeButton {
   display: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   STREAMBERRY MEDIA BAR v2
+   Full-bleed behind the transparent header, Moonfin-style.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 1. Make the skinHeader transparent on home ──────────────── */
+/* Targets all Jellyfin header variants and headroom states.
+   On mobile the home page is #indexPage; on desktop it is .homePage.
+   We also target the header directly (no page-scope) so it works
+   regardless of which wrapper class Jellyfin puts on the body.     */
+
+/* Always-transparent states */
+.skinHeader.headroom--top,
+.skinHeader.headroom--pinned,
+body:has(#indexPage:not(.hide)) .skinHeader,
+body:has(#indexPage:not(.hide)) .skinHeader-withBackground,
+body:has(.homePage:not(.hide)) .skinHeader,
+body:has(.homePage:not(.hide)) .skinHeader-withBackground {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+}
+
+/* Restore once scrolled */
+.skinHeader.headroom--not-top {
+  background: rgba(10,10,10,0.92) !important;
+  background-color: rgba(10,10,10,0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  transition: background 0.3s ease, backdrop-filter 0.3s ease !important;
+}
+
+/* ── 2. Strip the padding-top that pushes content below the header ── */
+/* This is the key: Jellyfin injects padding-top: --appBarHeight on the
+   scroll container so content doesn't hide under the fixed header.
+   We remove it only on the home page so the bar can start at y=0.    */
+body:has(#indexPage:not(.hide)) .scrollY,
+body:has(#indexPage:not(.hide)) .scrollY > :first-child,
+body:has(#indexPage:not(.hide)) .page,
+body:has(.homePage:not(.hide))  .scrollY,
+body:has(.homePage:not(.hide))  .scrollY > :first-child,
+body:has(.homePage:not(.hide))  .page,
+.homePage .padded-top-focusscale,
+.indexPage .padded-top-focusscale {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* ── 3. Media bar container ──────────────────────────────────── */
+/* The bar uses a negative top margin equal to the header height so it
+   visually slides behind the now-transparent header.
+   padding-top mirrors the margin so the backdrop image starts at y=0
+   while text content is pushed down below the header.               */
+#sbMediaBar {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+  height: clamp(280px, 56vw, 520px);
+  margin-top: calc(-1 * var(--appBarHeight, 4.5em));
+  padding-top: var(--appBarHeight, 4.5em);
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  z-index: 0;
+}
+
+.layout-desktop #sbMediaBar {
+  height: clamp(380px, 56vh, 660px);
+  margin-top: calc(-1 * var(--appBarHeight, 5em));
+  padding-top: var(--appBarHeight, 5em);
+}
+
+.layout-tv #sbMediaBar {
+  height: clamp(420px, 62vh, 780px);
+  margin-top: calc(-1 * var(--appBarHeight, 4em));
+  padding-top: var(--appBarHeight, 4em);
+}
+
+/* Mobile: --appBarHeight is 5em by default in Streamberry.
+   The bottom nav bar (sbBottomNav) doesn't affect the top, but we
+   confirm the top offset matches the actual skinHeader height.     */
+.layout-mobile #sbMediaBar {
+  margin-top: calc(-1 * var(--appBarHeight, 5em));
+  padding-top: var(--appBarHeight, 5em);
+  /* Tall enough to show the backdrop clearly behind the nav + content box */
+  height: clamp(520px, 58vw, 520px);
+}
+
+/* ── 4. Slide track ──────────────────────────────────────── */
+.sbMbTrack {
+  position: absolute;
+  inset: 0;
+}
+
+.sbMbSlide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 700ms ease;
+  pointer-events: none;
+}
+
+.sbMbSlide--active {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+/* ── 5. Background image with Ken Burns drift ────────────── */
+.sbMbBg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 18%;
+  background-repeat: no-repeat;
+  transform: scale(1.05);
+  transition: transform 9s ease;
+  will-change: transform;
+}
+
+.sbMbSlide--active .sbMbBg {
+  transform: scale(1);
+}
+
+/* ── 6. Gradient scrim ───────────────────────────────────── */
+/*    Left panel for text + strong bottom fade that bleeds into
+      the page content below, exactly like Moonfin's look.     */
+.sbMbScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    /* left column darkens for legible text */
+    linear-gradient(to right,
+      rgba(10,10,10,0.95) 0%,
+      rgba(10,10,10,0.70) 35%,
+      rgba(10,10,10,0.20) 58%,
+      transparent        75%),
+    /* bottom fade blends into page background */
+    linear-gradient(to top,
+      rgba(10,10,10,1.00) 0%,
+      rgba(10,10,10,0.70) 18%,
+      rgba(10,10,10,0.10) 40%,
+      transparent        60%),
+    /* top fade so header icons stay readable */
+    linear-gradient(to bottom,
+      rgba(10,10,10,0.55) 0%,
+      transparent        25%);
+}
+
+/* Mobile: lighter vertical-only scrim so the backdrop image shows clearly.
+   Bottom half fades to page bg; top is just a soft header shadow.        */
+.layout-mobile .sbMbScrim {
+  background:
+    linear-gradient(to top,
+      rgba(10,10,10,0.98) 0%,
+      rgba(10,10,10,0.60) 28%,
+      rgba(10,10,10,0.08) 52%,
+      transparent        68%),
+    linear-gradient(to bottom,
+      rgba(10,10,10,0.45) 0%,
+      transparent        18%);
+}
+
+/* ── 7. Content panel — frosted glass info box (Moonfin style) ── */
+.sbMbContent {
+  position: absolute;
+  bottom: 2.8em;
+  left: var(--sidePadding, 3.3%);
+  /* Stop at ~55% width on desktop so it doesn't crowd the image */
+  right: 46%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  /* Frosted glass pill */
+  background: rgba(12, 12, 14, 0.62);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 1em;
+  padding: 1em 1.15em 1.05em;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+  /* Slide-up entrance */
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 550ms ease 180ms, transform 550ms ease 180ms;
+}
+
+.sbMbSlide--active .sbMbContent {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Mobile: full width, anchored above the dot indicators */
+.layout-mobile .sbMbContent {
+  left: 3%;
+  right: 3%;
+  bottom: 2.8em;   /* sits above the dots row */
+  gap: 0.35em;
+  padding: 0.75em 0.9em 0.8em;
+  border-radius: 0.85em;
+}
+
+.layout-tv .sbMbContent {
+  right: 50%;
+  bottom: 4em;
+}
+
+/* ── 8. Logo — floats above the frosted glass box ───────── */
+.sbMbLogo {
+  position: absolute;
+  /* Sits just above .sbMbContent — we use bottom offset matched to box position */
+  bottom: calc(2.8em + var(--sbMbBoxHeight, 11em) + 0.6em);
+  left: calc(var(--sidePadding, 3.3%) + 1.15em);
+  z-index: 3;
+  max-width: 280px;
+  max-height: 100px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,0.85));
+  /* Same entrance animation as content box */
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 550ms ease 120ms, transform 550ms ease 120ms;
+}
+
+.sbMbSlide--active .sbMbLogo {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.layout-mobile .sbMbLogo {
+  max-width: 190px;
+  max-height: 68px;
+  left: calc(3% + 0.9em);
+  bottom: calc(2.8em + var(--sbMbBoxHeight, 9em) + 0.5em);
+}
+
+.layout-tv .sbMbLogo {
+  max-width: 340px;
+  max-height: 120px;
+  bottom: calc(4em + var(--sbMbBoxHeight, 11em) + 0.6em);
+}
+
+.sbMbTitleFallback {
+  font-family: "Inter", sans-serif;
+  font-size: clamp(1.5em, 4vw, 2.6em);
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.9);
+  margin: 0;
+}
+
+/* ── 9. Subtitle ─────────────────────────────────────────── */
+.sbMbSub {
+  font-family: "Inter", sans-serif;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: var(--dimTextColor);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* ── 10. Meta row ────────────────────────────────────────── */
+.sbMbMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  flex-wrap: wrap;
+}
+
+.sbMbMetaText {
+  font-family: "Inter", sans-serif;
+  font-size: 0.8em;
+  color: var(--dimTextColor);
+}
+
+.sbMbRating {
+  font-family: "Inter", sans-serif;
+  font-size: 0.7em;
+  font-weight: 700;
+  color: var(--dimTextColor);
+  border: 1px solid rgba(255,255,255,0.28);
+  padding: 0.08em 0.4em;
+  border-radius: 0.2em;
+  letter-spacing: 0.03em;
+}
+
+.sbMbScore {
+  font-family: "Inter", sans-serif;
+  font-size: 0.8em;
+  color: #f5c518;
+  font-weight: 600;
+}
+
+.sbMbGenreSep {
+  color: var(--dimTextColor);
+  font-size: 0.8em;
+}
+
+.sbMbGenres {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sbMbGenres span {
+  font-family: "Inter", sans-serif;
+  font-size: 0.75em;
+  color: var(--textColor);
+  background: rgba(255,255,255,0.09);
+  border: 1px solid rgba(255,255,255,0.14);
+  padding: 0.18em 0.6em;
+  border-radius: 2em;
+}
+
+/* ── 11. Overview ────────────────────────────────────────── */
+.sbMbOverview {
+  font-family: "Inter", sans-serif;
+  font-size: 0.82em;
+  color: rgba(229,229,229,0.85);
+  line-height: 1.55;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Show overview on all layouts — 2 lines on mobile, 3 on desktop */
+.layout-mobile .sbMbOverview {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── 12. Buttons ─────────────────────────────────────────── */
+.sbMbActions {
+  display: flex;
+  gap: 0.6em;
+  flex-wrap: wrap;
+  margin-top: 0.15em;
+}
+
+.sbMbBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-family: "Inter", sans-serif;
+  font-size: 0.85em;
+  font-weight: 700;
+  padding: 0.55em 1.2em;
+  border-radius: 0.45em;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.sbMbBtn .material-icons { font-size: 1.1em; }
+.sbMbBtn:active { transform: scale(0.96); }
+
+.sbMbBtn--play {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 1em var(--accentGlow);
+}
+.sbMbBtn--play:hover  { background: rgb(200,7,17); color: #fff; }
+
+.sbMbBtn--info {
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.22);
+}
+.sbMbBtn--info:hover  { background: rgba(255,255,255,0.26); color: #fff; }
+
+/* ── 13. Navigation: arrows ──────────────────────────────── */
+.sbMbArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  width: 2.4em;
+  height: 2.4em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.16s;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+  opacity: 0;  /* hidden by default, shown on bar hover */
+  transition: opacity 0.2s, background 0.16s;
+}
+
+#sbMediaBar:hover .sbMbArrow { opacity: 1; }
+
+.sbMbArrow:hover { background: rgba(0,0,0,0.72); }
+.sbMbArrow .material-icons { font-size: 1.4em; line-height: 1; }
+.sbMbArrow--prev { left: 0.75em; }
+.sbMbArrow--next { right: 0.75em; }
+
+/* HIDE arrows on mobile — swipe is the gesture there */
+.layout-mobile .sbMbArrow { display: none !important; }
+
+/* On non-touch desktop: show on hover only (already handled above) */
+@media (hover: none) and (pointer: coarse) {
+  /* touch-primary device that isn't layout-mobile (e.g. tablet TV) */
+  .sbMbArrow { opacity: 0.7; }
+}
+
+/* ── 14. Navigation: dots ────────────────────────────────── */
+.sbMbDots {
+  position: absolute;
+  bottom: 1.1em;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: 0.38em;
+  align-items: center;
+}
+
+.layout-desktop .sbMbDots,
+.layout-tv      .sbMbDots {
+  /* On desktop, align dots with the right side, away from content */
+  left: unset;
+  right: var(--sidePadding, 3.3%);
+  transform: none;
+  bottom: 1.4em;
+}
+
+.sbMbDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.38);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.22s, width 0.25s, border-radius 0.25s;
+}
+
+.sbMbDot--active {
+  background: var(--accent);
+  width: 20px;
+  border-radius: 3px;
+}
+
+/* ── 15. Reduced motion ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .sbMbSlide,
+  .sbMbContent,
+  .sbMbBg { transition: none !important; }
+}

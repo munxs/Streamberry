@@ -822,3 +822,303 @@
   setTimeout(scanForTabBars, 800);
   setTimeout(scanForTabBars, 1500);
 })();
+
+/* ═══════════════════════════════════════════════════════════
+   STREAMBERRY MEDIA BAR — Featured Content Carousel v2
+   Full-bleed behind header, exactly like Moonfin.
+   No plugin dependency. Works on desktop, mobile, TV clients.
+   ═══════════════════════════════════════════════════════════ */
+(function () {
+  "use strict";
+
+  /* ── Config ─────────────────────────────────────────────── */
+  const MB_ID      = "sbMediaBar";
+  const MAX_ITEMS  = 6;    // cycle through max 6 items
+  const SLIDE_MS   = 7000; // auto-advance every 7 s
+  const IMG_QUALITY = 90;
+
+  /* ── State ───────────────────────────────────────────────── */
+  let _items       = [];
+  let _current     = 0;
+  let _timer       = null;
+  let _paused      = false;
+  let _built       = false;
+  let _loading     = false;
+  let _touchStartX = 0;
+
+  /* ── API helpers ─────────────────────────────────────────── */
+  function apiClient() {
+    try { return window.ApiClient || (window.connectionManager && window.connectionManager.currentApiClient()); }
+    catch { return null; }
+  }
+  function token() {
+    try {
+      const c = apiClient();
+      if (!c) return "";
+      return typeof c.accessToken === "function" ? c.accessToken() : (c._accessToken || c.token || "");
+    } catch { return ""; }
+  }
+  function serverUrl() {
+    try {
+      const c = apiClient();
+      if (!c) return window.location.origin;
+      const s = typeof c.serverAddress === "function" ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin);
+      return s.replace(/\/$/, "");
+    } catch { return window.location.origin; }
+  }
+  function userId() {
+    try {
+      const c = apiClient();
+      if (!c) return "";
+      return typeof c.getCurrentUserId === "function" ? c.getCurrentUserId() : (c._currentUserId || "");
+    } catch { return ""; }
+  }
+
+  /* ── Page detection ─────────────────────────────────────── */
+  function isHome() {
+    const h = location.hash || "";
+    return h === "" || h === "#/" || h.startsWith("#/home") || h.startsWith("#/index");
+  }
+  function isMob() { return document.documentElement.classList.contains("layout-mobile"); }
+
+  /* ── Image URLs ──────────────────────────────────────────── */
+  function imgUrl(item, type, opts) {
+    const base = `${serverUrl()}/Items/${item.Id}/Images/${type}`;
+    const params = new URLSearchParams({ quality: IMG_QUALITY, api_key: token(), ...opts });
+    return `${base}?${params}`;
+  }
+  function backdropUrl(item) {
+    if (item.BackdropImageTags?.length)
+      return imgUrl(item, "Backdrop/0", { fillWidth: 1920, tag: item.BackdropImageTags[0] });
+    if (item.ParentBackdropItemId && item.ParentBackdropImageTags?.length)
+      return `${serverUrl()}/Items/${item.ParentBackdropItemId}/Images/Backdrop/0?fillWidth=1920&quality=${IMG_QUALITY}&tag=${item.ParentBackdropImageTags[0]}&api_key=${token()}`;
+    return null;
+  }
+  function logoUrl(item) {
+    if (item.ImageTags?.Logo)
+      return imgUrl(item, "Logo", { fillHeight: 140, tag: item.ImageTags.Logo });
+    if (item.ParentLogoItemId && item.ParentLogoImageTag)
+      return `${serverUrl()}/Items/${item.ParentLogoItemId}/Images/Logo?fillHeight=140&quality=${IMG_QUALITY}&tag=${item.ParentLogoImageTag}&api_key=${token()}`;
+    return null;
+  }
+
+  /* ── Data fetch ──────────────────────────────────────────── */
+  function fetchItems(cb) {
+    const srv = serverUrl(), tok = token(), uid = userId();
+    if (!tok || !uid) { cb([]); return; }
+    const headers = { "X-Emby-Authorization": `MediaBrowser Token="${tok}"`, "Accept": "application/json" };
+    const fields  = "BackdropImageTags,ImageTags,Overview,Genres,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,SeriesName,ParentBackdropItemId,ParentBackdropImageTags,ParentLogoItemId,ParentLogoImageTag,SeasonName";
+
+    const recentUrl = `${srv}/Users/${uid}/Items/Latest?Limit=10&IncludeItemTypes=Movie,Series&Fields=${fields}&IsPlayed=false&EnableImageTypes=Backdrop,Logo`;
+    const resumeUrl = `${srv}/Users/${uid}/Items/Resume?Limit=4&IncludeItemTypes=Movie,Episode&Fields=${fields}&MediaTypes=Video&EnableImageTypes=Backdrop,Logo`;
+
+    Promise.all([
+      fetch(recentUrl, { headers }).then(r => r.ok ? r.json() : []),
+      fetch(resumeUrl, { headers }).then(r => r.ok ? r.json() : { Items: [] })
+    ]).then(([recent, resume]) => {
+      const recentArr = Array.isArray(recent) ? recent : (recent.Items || []);
+      const resumeArr = Array.isArray(resume) ? resume : (resume.Items || []);
+      const seen = new Set(), merged = [];
+      for (const item of [...resumeArr, ...recentArr]) {
+        const key = item.SeriesId || item.Id;
+        if (!seen.has(key)) { seen.add(key); merged.push(item); }
+      }
+      cb(merged.filter(i => backdropUrl(i)).slice(0, MAX_ITEMS));
+    }).catch(() => cb([]));
+  }
+
+  /* ── Formatters ──────────────────────────────────────────── */
+  function fmtRuntime(ticks) {
+    if (!ticks) return "";
+    const m = Math.round(ticks / 600000000);
+    return m >= 60 ? `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}` : `${m}m`;
+  }
+  function itemTitle(item) { return item.SeriesName || item.Name || ""; }
+  function itemSub(item) {
+    // Only show subtitle for episodes (series + season + ep number)
+    // Year is already shown in the meta row — don't duplicate it here
+    if (item.Type === "Episode") {
+      return [item.SeasonName, item.IndexNumber != null ? `E${item.IndexNumber}` : ""].filter(Boolean).join(" · ");
+    }
+    return "";
+  }
+  function detailUrl(item) {
+    return `/web/#/details?id=${item.Type === "Episode" ? (item.SeriesId || item.Id) : item.Id}`;
+  }
+
+  /* ── Slide HTML ──────────────────────────────────────────── */
+  function slideHTML(item, i) {
+    const bg     = backdropUrl(item);
+    const logo   = logoUrl(item);
+    const title  = itemTitle(item);
+    const sub    = itemSub(item);
+    const rt     = fmtRuntime(item.RunTimeTicks);
+    const year   = item.ProductionYear || "";
+    const rating = item.OfficialRating ? `<span class="sbMbRating">${item.OfficialRating}</span>` : "";
+    const score  = item.CommunityRating ? `<span class="sbMbScore">★ ${item.CommunityRating.toFixed(1)}</span>` : "";
+    const genres = (item.Genres || []).slice(0, 3).map(g => `<span>${g}</span>`).join("");
+    const ov     = item.Overview ? item.Overview.slice(0, 180) + (item.Overview.length > 180 ? "…" : "") : "";
+    const meta   = [year, rt].filter(Boolean).join(" · ");
+
+    return `
+      <div class="sbMbSlide${i === 0 ? " sbMbSlide--active" : ""}" data-index="${i}" aria-hidden="${i !== 0}">
+        <div class="sbMbBg" style="background-image:url('${bg}')"></div>
+        <div class="sbMbScrim"></div>
+        ${logo ? `<img class="sbMbLogo" src="${logo}" alt="${title}">` : ""}
+        <div class="sbMbContent">
+          ${sub ? `<p class="sbMbSub">${sub}</p>` : ""}
+          <div class="sbMbMeta">
+            ${meta   ? `<span class="sbMbMetaText">${meta}</span>` : ""}
+            ${rating}${score}
+            ${genres ? `<span class="sbMbGenreSep">·</span><span class="sbMbGenres">${genres}</span>` : ""}
+          </div>
+          ${ov ? `<p class="sbMbOverview">${ov}</p>` : ""}
+          <div class="sbMbActions">
+            <a class="sbMbBtn sbMbBtn--play" href="${detailUrl(item)}"><span class="material-icons">play_arrow</span>Play</a>
+            <a class="sbMbBtn sbMbBtn--info" href="${detailUrl(item)}"><span class="material-icons">info</span>More Info</a>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /* ── Bar DOM ─────────────────────────────────────────────── */
+  function buildBar(items) {
+    const el = document.createElement("div");
+    el.id = MB_ID;
+    el.setAttribute("role", "region");
+    el.setAttribute("aria-label", "Featured content");
+    el.setAttribute("tabindex", "0");
+
+    const dotsHTML = items.length > 1
+      ? items.map((_, i) => `<button class="sbMbDot${i===0?" sbMbDot--active":""}" data-dot="${i}" aria-label="Slide ${i+1}"></button>`).join("")
+      : "";
+
+    el.innerHTML = `
+      <div class="sbMbTrack">${items.map((item, i) => slideHTML(item, i)).join("")}</div>
+      ${items.length > 1 ? `
+        <button class="sbMbArrow sbMbArrow--prev" aria-label="Previous"><span class="material-icons">chevron_left</span></button>
+        <button class="sbMbArrow sbMbArrow--next" aria-label="Next"><span class="material-icons">chevron_right</span></button>
+        <div class="sbMbDots">${dotsHTML}</div>
+      ` : ""}`;
+    return el;
+  }
+
+  /* ── Slide logic ─────────────────────────────────────────── */
+  function slides()  { return document.querySelectorAll(`#${MB_ID} .sbMbSlide`); }
+  function dots()    { return document.querySelectorAll(`#${MB_ID} .sbMbDot`); }
+
+  function goTo(idx) {
+    const ss = slides(), ds = dots();
+    if (!ss.length) return;
+    _current = ((idx % ss.length) + ss.length) % ss.length;
+    ss.forEach((s, i) => {
+      s.classList.toggle("sbMbSlide--active", i === _current);
+      s.setAttribute("aria-hidden", String(i !== _current));
+    });
+    ds.forEach((d, i) => d.classList.toggle("sbMbDot--active", i === _current));
+  }
+
+  function startTimer() {
+    clearInterval(_timer);
+    if (_items.length <= 1 || _paused) return;
+    _timer = setInterval(() => goTo(_current + 1), SLIDE_MS);
+  }
+
+  /* ── Injection ───────────────────────────────────────────── */
+  function findTarget() {
+    return (
+      document.querySelector(".homeSectionsContainer") ||
+      document.querySelector(".sections") ||
+      document.querySelector("#homeTab") ||
+      document.querySelector(".indexPage .padded-top")
+    );
+  }
+
+  function inject() {
+    if (!isHome() || document.getElementById(MB_ID) || !_items.length) return;
+    const target = findTarget();
+    if (!target) return;
+
+    const bar = buildBar(_items);
+
+    // Insert the bar as a sibling BEFORE the home sections, inside whatever
+    // scroll container holds them — so it appears above all library rows.
+    target.parentNode.insertBefore(bar, target);
+
+    // Events
+    bar.querySelector(".sbMbArrow--prev")?.addEventListener("click", e => { e.stopPropagation(); goTo(_current - 1); startTimer(); });
+    bar.querySelector(".sbMbArrow--next")?.addEventListener("click", e => { e.stopPropagation(); goTo(_current + 1); startTimer(); });
+    bar.querySelectorAll(".sbMbDot").forEach(d => d.addEventListener("click", e => { e.stopPropagation(); goTo(+d.dataset.dot); startTimer(); }));
+    bar.addEventListener("mouseenter", () => { _paused = true;  clearInterval(_timer); });
+    bar.addEventListener("mouseleave", () => { _paused = false; startTimer(); });
+    bar.addEventListener("touchstart", e => { _touchStartX = e.touches[0].clientX; }, { passive: true });
+    bar.addEventListener("touchend",   e => {
+      const dx = e.changedTouches[0].clientX - _touchStartX;
+      if (Math.abs(dx) > 45) {
+        e.preventDefault();    // cancel any click/link navigation
+        e.stopPropagation();
+        goTo(_current + (dx < 0 ? 1 : -1));
+        startTimer();
+      }
+    });
+    bar.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft")  { goTo(_current - 1); startTimer(); }
+      if (e.key === "ArrowRight") { goTo(_current + 1); startTimer(); }
+    });
+
+    startTimer();
+    _built = true;
+  }
+
+  function eject() {
+    clearInterval(_timer);
+    _built = false;
+    document.getElementById(MB_ID)?.remove();
+  }
+
+  /* ── Boot ────────────────────────────────────────────────── */
+  function load() {
+    if (_loading) return;
+    const c = apiClient();
+    if (!c || !userId()) return;
+    _loading = true;
+    fetchItems(items => {
+      _loading = false;
+      _items   = items;
+      if (items.length && isHome() && !document.getElementById(MB_ID)) inject();
+    });
+  }
+
+  function onRoute() {
+    if (isHome()) {
+      if (!document.getElementById(MB_ID)) {
+        _items.length ? setTimeout(inject, 350) : setTimeout(load, 350);
+      }
+    } else {
+      eject();
+    }
+  }
+
+  function init() {
+    window.addEventListener("hashchange", onRoute);
+    window.addEventListener("popstate",   onRoute);
+
+    // Watch for the home container to appear (SPA navigation)
+    new MutationObserver(() => {
+      if (!isHome() || _built || document.getElementById(MB_ID)) return;
+      if (findTarget() && _items.length) inject();
+    }).observe(document.body, { childList: true, subtree: true });
+
+    // Wait for ApiClient to be ready
+    let tries = 0;
+    const poll = () => {
+      if (apiClient() && userId()) { load(); return; }
+      if (++tries < 40) setTimeout(poll, 500);
+    };
+    setTimeout(poll, 800);
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else setTimeout(init, 300);
+
+})();
