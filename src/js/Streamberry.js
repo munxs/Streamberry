@@ -354,32 +354,25 @@
     }
 
     // ── Build auto-login URL using the current user's Jellyfin token ──
-    // Jellyseerr's /login/jellyfin endpoint accepts:
-    //   ?jellyfinHost=<your jellyfin server URL>&token=<access token>
-    // This signs the user in automatically without a second login prompt.
-    // We probe the endpoint first; if it 404s (Overseerr or Jellyfin auth
-    // disabled) we fall back to the bare Jellyseerr URL gracefully.
+    // Jellyseerr's /login/jellyfin SSO route only exists when Jellyfin is
+    // configured as an auth provider in Jellyseerr settings. We check
+    // /api/v1/settings/public first (unauthenticated JSON, no 404 risk) to
+    // confirm jellyfinExternalUrl is set before attempting SSO — this
+    // eliminates the 404 console error when SSO is not yet configured.
     const token = getJellyfinToken();
     const jellyfinHost = getJellyfinServerUrl();
     const ssoUrl = token
       ? `${url}/login/jellyfin?jellyfinHost=${encodeURIComponent(jellyfinHost)}&token=${encodeURIComponent(token)}`
       : null;
 
-    function _loadJellyseerrFrame(frame, loader, targetUrl) {
-      loader.style.display = "";
-      loader.innerHTML = `
-        <span class="material-icons sbJellyseerrSpinner">autorenew</span>
-        <p>Loading Seerr…</p>`;
-      frame.style.opacity = "0";
-      frame.src = targetUrl;
-    }
-
-    // Probe SSO endpoint; fall back to bare URL on 404/error
+    // Check /api/v1/settings/public — unauthenticated, returns { jellyfinExternalUrl, ... }.
+    // If jellyfinExternalUrl is set, Jellyfin SSO is active and /login/jellyfin exists.
     function _resolveIframeUrl(onResolved) {
       if (!ssoUrl) { onResolved(url); return; }
-      fetch(ssoUrl, { method: "HEAD", redirect: "follow" })
-        .then(r => onResolved(r.ok || r.status === 0 ? ssoUrl : url))
-        .catch(() => onResolved(url));
+      fetch(`${url}/api/v1/settings/public`)
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(data => onResolved((data && data.jellyfinExternalUrl) ? ssoUrl : url))
+        .catch(() => onResolved(ssoUrl)); // can't reach API — try SSO anyway
     }
 
     let overlay = document.getElementById("sbJellyseerrOverlay");
@@ -389,7 +382,14 @@
       const existingFrame = document.getElementById("sbJellyseerrFrame");
       const existingLoader = document.getElementById("sbJellyseerrLoader");
       if (existingFrame && existingLoader) {
-        _resolveIframeUrl(resolved => _loadJellyseerrFrame(existingFrame, existingLoader, resolved));
+        _resolveIframeUrl(resolved => {
+          existingLoader.style.display = "";
+          existingLoader.innerHTML = `
+            <span class="material-icons sbJellyseerrSpinner">autorenew</span>
+            <p>Loading Seerr…</p>`;
+          existingFrame.style.opacity = "0";
+          existingFrame.src = resolved;
+        });
       }
     } else {
       overlay = document.createElement("div");
@@ -416,6 +416,7 @@
       iframe.setAttribute("allow", "fullscreen");
 
       iframe.addEventListener("load", () => {
+        if (iframe.src === "about:blank") return;
         loader.style.display = "none";
         iframe.style.opacity = "1";
       });
@@ -433,7 +434,7 @@
       document.body.appendChild(overlay);
       document.getElementById("sbJellyseerrClose").addEventListener("click", closeJellyseerrOverlay);
 
-      // Probe SSO endpoint then load — falls back to bare URL if /login/jellyfin returns 404
+      // Resolve SSO availability before setting iframe src
       _resolveIframeUrl(resolved => { iframe.src = resolved; });
     }
 
