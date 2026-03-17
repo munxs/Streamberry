@@ -2675,7 +2675,7 @@ body:has(.homePage:not(.hide))  .page,
   width: 100%;
   overflow: hidden;
   background: #000;
-  height: clamp(280px, 56vw, 520px);
+  height: clamp(500px, 56vw, 520px);
   margin-top: calc(-1 * var(--appBarHeight, 4.5em));
   padding-top: var(--appBarHeight, 4.5em);
   box-sizing: border-box;
