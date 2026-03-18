@@ -1415,8 +1415,7 @@
 
 /* ═══════════════════════════════════════════════════════════
    SB LIBRARY OVERLAY — Moonfin-style
-   Flash-free: native page elements permanently hidden via CSS.
-   Overlay replaces Movies, TV Shows, Favorites entirely.
+   Flash-free via body class added on hashchange before paint.
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -1442,6 +1441,7 @@
   ];
 
   const BATCH = 100;
+  const BODY_CLASS = 'sb-lib-page';
 
   /* ── State ── */
   let overlay    = null;
@@ -1459,29 +1459,18 @@
   let escHandler = null;
 
   /* ── API helpers ── */
-  function apiClient() {
-    return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null);
-  }
+  function apiClient() { return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null); }
   function userId() {
-    const c = apiClient();
-    if (!c) return null;
+    const c = apiClient(); if (!c) return null;
     try { return c.getCurrentUserId ? c.getCurrentUserId() : (c._currentUserId || null); } catch(e) { return null; }
   }
   function serverUrl() {
-    const c = apiClient();
-    if (!c) return window.location.origin;
-    try {
-      const s = c.serverAddress ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin);
-      return s.replace(/\/$/, '');
-    } catch(e) { return window.location.origin; }
+    const c = apiClient(); if (!c) return window.location.origin;
+    try { const s = c.serverAddress ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin); return s.replace(/\/$/, ''); } catch(e) { return window.location.origin; }
   }
   function authHeader() {
-    const c = apiClient();
-    if (!c) return '';
-    try {
-      const tok = c.accessToken ? c.accessToken() : (c._accessToken || c.token || '');
-      return `MediaBrowser Token="${tok}"`;
-    } catch(e) { return ''; }
+    const c = apiClient(); if (!c) return '';
+    try { const tok = c.accessToken ? c.accessToken() : (c._accessToken || c.token || ''); return `MediaBrowser Token="${tok}"`; } catch(e) { return ''; }
   }
   function posterUrl(item) {
     if (!item.ImageTags || !item.ImageTags.Primary) return null;
@@ -1489,67 +1478,40 @@
   }
 
   /* ── Page detection ── */
-  function hash() { return (location.hash || '').toLowerCase(); }
-  function isMoviesPage()    { return hash().includes('/movies'); }
-  function isTVPage()        { return hash().includes('/tv'); }
-  function isFavoritesPage() { return hash().includes('tab=1') || hash().includes('/favorites') || hash().includes('/favorite'); }
+  function h() { return (location.hash || '').toLowerCase(); }
+  function isMoviesPage()    { return h().includes('/movies'); }
+  function isTVPage()        { return h().includes('/tv'); }
+  function isFavoritesPage() { return h().includes('tab=1') || h().includes('/favorites') || h().includes('/favorite'); }
   function isInterceptable() { return isMoviesPage() || isTVPage() || isFavoritesPage(); }
 
-  /* ── Inject a style tag to nuke native remnants instantly ──
-     This is a JS-injected <style> so it fires before any paint,
-     completely eliminating the flash regardless of CSS load order. ── */
-  function injectFlashKiller() {
-    if (document.getElementById('sbFlashKiller')) return;
-    const s = document.createElement('style');
-    s.id = 'sbFlashKiller';
-    s.textContent = `
-      .alphaPicker, .alphaPickerSection, .alphaPicker-fixed { display: none !important; }
-      .itemsTab .viewMenuBar, .libraryPage .viewMenuBar { display: none !important; }
-      .itemsTab .pageTitle, .libraryPage .pageTitle,
-      .itemsTab .sectionTitleContainer, .libraryPage .sectionTitleContainer { display: none !important; }
-      .itemsTab .itemsContainer, .libraryPage .itemsContainer,
-      #favoritesPage .itemsContainer, .favoritesTab .itemsContainer { visibility: hidden !important; opacity: 0 !important; }
-    `;
-    // Inject as first child of <head> so it wins specificity race
-    const head = document.head || document.documentElement;
-    head.insertBefore(s, head.firstChild);
-  }
+  /* ── Body class controls the CSS flash shield ── */
+  function engageShield()  { document.body.classList.add(BODY_CLASS); }
+  function releaseShield() { document.body.classList.remove(BODY_CLASS); }
 
   /* ── Fetch ── */
   async function fetchItems(reset) {
     if (reset) { startIdx = 0; items = []; loading = true; render(); }
-
     const [sortBy, sortOrder] = sortKey.split(',');
     const inclTypes = filterKey === 'all'
       ? (colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'Movie,Series')
       : filterKey;
-
     const params = new URLSearchParams({
       StartIndex: startIdx, Limit: BATCH,
       SortBy: sortBy, SortOrder: sortOrder,
-      IncludeItemTypes: inclTypes,
-      Recursive: 'true',
+      IncludeItemTypes: inclTypes, Recursive: 'true',
       Fields: 'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
-      ImageTypeLimit: 1, EnableImageTypes: 'Primary',
-      UserId: userId(),
+      ImageTypeLimit: 1, EnableImageTypes: 'Primary', UserId: userId(),
     });
-
-    if (colType === 'favorites') {
-      params.set('IsFavorite', 'true');
-    } else if (libId) {
-      params.set('ParentId', libId);
-    }
-
+    if (colType === 'favorites') params.set('IsFavorite', 'true');
+    else if (libId)              params.set('ParentId', libId);
     if (letter && letter !== '#') params.set('NameStartsWith', letter);
     if (letter === '#')           params.set('NameLessThan', 'A');
-
     try {
       const res  = await fetch(`${serverUrl()}/Items?${params}`, { headers: { 'X-Emby-Authorization': authHeader() } });
       const data = await res.json();
       total = data.TotalRecordCount || 0;
       items = reset ? (data.Items || []) : items.concat(data.Items || []);
     } catch(e) { console.error('[Streamberry] fetchItems:', e); }
-
     loading = false;
     render();
   }
@@ -1558,24 +1520,14 @@
   function showDropdown(title, options, currentKey, onSelect) {
     document.getElementById('sbLibDropdown')?.remove();
     const dd = document.createElement('div');
-    dd.id = 'sbLibDropdown';
-    dd.className = 'sb-lib-dropdown';
-    let html = `<div class="sb-lib-dropdown-backdrop"></div><div class="sb-lib-dropdown-box">
-      <div class="sb-lib-dropdown-title">${title}</div>`;
-    options.forEach(o => {
-      html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active':''}" data-key="${o.key}">${o.label}</button>`;
-    });
+    dd.id = 'sbLibDropdown'; dd.className = 'sb-lib-dropdown';
+    let html = `<div class="sb-lib-dropdown-backdrop"></div><div class="sb-lib-dropdown-box"><div class="sb-lib-dropdown-title">${title}</div>`;
+    options.forEach(o => { html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active':''}" data-key="${o.key}">${o.label}</button>`; });
     dd.innerHTML = html + '</div>';
     document.body.appendChild(dd);
     requestAnimationFrame(() => dd.classList.add('sb-visible'));
-    dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => {
-      dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
-    });
-    dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn =>
-      btn.addEventListener('click', () => {
-        onSelect(btn.dataset.key);
-        dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
-      }));
+    dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => { dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200); });
+    dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn => btn.addEventListener('click', () => { onSelect(btn.dataset.key); dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200); }));
   }
 
   /* ── Render ── */
@@ -1583,10 +1535,7 @@
     if (!overlay) return;
     const sortLabel   = (SORT_OPTIONS.find(o => o.key === sortKey)    || SORT_OPTIONS[0]).label;
     const filterLabel = (FILTER_OPTIONS.find(o => o.key === filterKey) || FILTER_OPTIONS[0]).label;
-
-    const alphaHTML = LETTERS.map(l =>
-      `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active':''}" data-letter="${l}">${l}</button>`
-    ).join('');
+    const alphaHTML   = LETTERS.map(l => `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active':''}" data-letter="${l}">${l}</button>`).join('');
 
     let bodyHTML = '';
     if (loading && items.length === 0) {
@@ -1609,16 +1558,12 @@
           <div class="sb-lib-card-info">
             <div class="sb-lib-card-name">${(item.Name||'Unknown').replace(/</g,'&lt;')}</div>
             <div class="sb-lib-card-meta">
-              ${year  ? `<span>${year}</span>`  : ''}
-              ${rat   ? `<span>${rat}</span>`   : ''}
-              ${score ? `<span>${score}</span>` : ''}
+              ${year?`<span>${year}</span>`:''}${rat?`<span>${rat}</span>`:''}${score?`<span>${score}</span>`:''}
             </div>
           </div>
         </div>`;
       });
-      if (items.length < total) {
-        bodyHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
-      }
+      if (items.length < total) bodyHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
       bodyHTML += '</div>';
     }
 
@@ -1640,31 +1585,14 @@
   }
 
   function bindEvents() {
-    overlay.querySelector('#sbLibSort')?.addEventListener('click', () =>
-      showDropdown('Sort By', SORT_OPTIONS, sortKey, k => { sortKey = k; fetchItems(true); }));
-    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () =>
-      showDropdown('Filter', FILTER_OPTIONS, filterKey, k => { filterKey = k; fetchItems(true); }));
-    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn =>
-      btn.addEventListener('click', () => {
-        const l = btn.dataset.letter;
-        letter = letter === l ? null : l;
-        fetchItems(true);
-      }));
-    overlay.querySelectorAll('.sb-lib-card').forEach(card =>
-      card.addEventListener('click', () => {
-        const id = card.dataset.id;
-        if (!id) return;
-        location.href = `#!/details?id=${id}`;
-        hide();
-      }));
-    overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => {
-      startIdx = items.length; fetchItems(false);
-    });
+    overlay.querySelector('#sbLibSort')?.addEventListener('click', () => showDropdown('Sort By', SORT_OPTIONS, sortKey, k => { sortKey = k; fetchItems(true); }));
+    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () => showDropdown('Filter', FILTER_OPTIONS, filterKey, k => { filterKey = k; fetchItems(true); }));
+    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn => btn.addEventListener('click', () => { const l = btn.dataset.letter; letter = letter === l ? null : l; fetchItems(true); }));
+    overlay.querySelectorAll('.sb-lib-card').forEach(card => card.addEventListener('click', () => { const id = card.dataset.id; if (!id) return; hide(); location.href = `#!/details?id=${id}`; }));
+    overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => { startIdx = items.length; fetchItems(false); });
     overlay.addEventListener('scroll', () => {
       if (loading || items.length >= total) return;
-      if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) {
-        startIdx = items.length; fetchItems(false);
-      }
+      if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) { startIdx = items.length; fetchItems(false); }
     });
     if (escHandler) document.removeEventListener('keydown', escHandler);
     escHandler = e => { if (e.key === 'Escape' && visible) { e.preventDefault(); hide(); } };
@@ -1687,6 +1615,7 @@
     visible = false;
     overlay?.classList.remove('sb-visible');
     document.body.style.overflow = '';
+    releaseShield();
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
   }
 
@@ -1728,58 +1657,51 @@
     }
     if (visible) return;
     _active = true;
+    engageShield(); // ← hide native page NOW, before API call
 
-    // Wait for ApiClient if not ready yet
+    // Wait for ApiClient
     if (!apiClient() || !userId()) {
       let tries = 0;
       await new Promise(resolve => {
         const poll = setInterval(() => {
-          if ((apiClient() && userId()) || ++tries > 30) {
-            clearInterval(poll); resolve();
-          }
+          if ((apiClient() && userId()) || ++tries > 30) { clearInterval(poll); resolve(); }
         }, 200);
       });
     }
 
-    if (!apiClient() || !userId()) { _active = false; return; }
+    if (!apiClient() || !userId()) { _active = false; releaseShield(); return; }
 
     if (isFavoritesPage()) { show(null, 'Favorites', 'favorites'); return; }
 
     const id = await resolveLibId();
-    if (!id) { _active = false; return; }
+    if (!id) { _active = false; releaseShield(); return; }
 
     const type = isMoviesPage() ? 'movies' : isTVPage() ? 'tvshows' : '';
-    const name = type === 'movies' ? 'Movies' : 'TV Shows';
-    show(id, name, type);
+    show(id, type === 'movies' ? 'Movies' : 'TV Shows', type);
   }
 
   /* ── Boot ── */
-  // Inject the flash-killer <style> as early as possible
-  injectFlashKiller();
   createOverlay();
 
+  // Engage shield IMMEDIATELY on hashchange — before Jellyfin renders anything
   window.addEventListener('hashchange', () => {
-    _active = false;
     if (visible) hide();
-    // Re-inject flash killer on every navigation (SPA may have replaced head)
-    injectFlashKiller();
-    setTimeout(tryIntercept, 250);
-  });
+    _active = false;
+    if (isInterceptable()) engageShield();
+    setTimeout(tryIntercept, 200);
+  }, true); // capture phase — fires before Jellyfin's own listener
 
   window.addEventListener('popstate', () => {
-    injectFlashKiller();
-    setTimeout(tryIntercept, 250);
-  });
+    if (isInterceptable()) engageShield();
+    setTimeout(tryIntercept, 200);
+  }, true);
 
   const _boot = () => {
-    injectFlashKiller();
+    if (isInterceptable()) engageShield();
     setTimeout(tryIntercept, 700);
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _boot);
-  } else {
-    _boot();
-  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', _boot); }
+  else { _boot(); }
 
 })();
