@@ -63,50 +63,34 @@
   }
   setFavicon();
 
-  /* ── Logo replacement ── */
-  // Selectors that cover every place Jellyfin shows its logo
-  var LOGO_SELECTORS = [
-    // Header logo image
-    '.headerLogo img',
-    '.headerLogoImage',
-    '.logoImage',
-    // Login page logo
-    '.loginLogo img',
-    '.loginLogo',
-    // Splash / loading screen
-    '.splashLogo',
-    '.splash-logo',
-    // Any img whose src contains jellyfin branding
-    'img[src*="banner-light"]',
-    'img[src*="banner-dark"]',
-    'img[src*="banner.png"]',
-    'img[src*="logo.png"]',
-    'img[src*="jellyfin-banner"]',
-    'img[src*="Jellyfin_Logo"]',
-  ].join(",");
-
+  /* ── Header logo ── */
+  /* Jellyfin uses .pageTitleWithDefaultLogo as a CSS background-image element.
+     We override it via JS to ensure it wins over theme.css                    */
   function replaceLogos() {
-    // Replace img tags
-    document.querySelectorAll(LOGO_SELECTORS).forEach(function(img) {
-      if (img.tagName === "IMG" && !img.dataset.sbLogo) {
+    // Header logo element
+    document.querySelectorAll('.pageTitleWithDefaultLogo, .pageTitleWithLogo').forEach(function(el) {
+      if (!el.dataset.sbLogo) {
+        el.dataset.sbLogo = "1";
+        el.style.backgroundImage  = 'url("' + LOGO + '")';
+        el.style.backgroundSize   = "contain";
+        el.style.backgroundRepeat = "no-repeat";
+        el.style.backgroundPosition = "left center";
+        el.style.minWidth  = "8em";
+        el.style.minHeight = "2.5em";
+        el.style.display   = "block";
+      }
+    });
+
+    // Any actual img tags with Jellyfin branding (fallback)
+    document.querySelectorAll('img[src*="banner-light"], img[src*="banner-dark"], img[src*="banner.png"], img[src*="Jellyfin_Logo"]').forEach(function(img) {
+      if (!img.dataset.sbLogo) {
         img.dataset.sbLogo = "1";
         img.src = LOGO;
         img.style.cssText = "max-height:2em;width:auto;object-fit:contain;display:block;";
       }
     });
-
-    // Also replace background-image logos set via inline style
-    document.querySelectorAll('[style*="banner-light"],[style*="banner-dark"],[style*="Jellyfin_Logo"]').forEach(function(el) {
-      if (!el.dataset.sbLogo) {
-        el.dataset.sbLogo = "1";
-        el.style.backgroundImage = 'url("' + LOGO + '")';
-        el.style.backgroundSize = "contain";
-        el.style.backgroundRepeat = "no-repeat";
-      }
-    });
   }
 
-  // Run immediately and watch for DOM changes
   replaceLogos();
   new MutationObserver(replaceLogos).observe(document.documentElement, {
     childList: true, subtree: true

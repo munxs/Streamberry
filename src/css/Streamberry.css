@@ -3192,20 +3192,34 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 .portraitCard[data-type="BoxSet"] .cardScalable::before { content: "BOX SET"; background: rgba(196,136,18,0.93);  color: #fff; }
 
 /* ── Logo replacement via CSS ────────────────────────────────── */
-/* Hides the default Jellyfin text/SVG logo and replaces with sb_logo */
-.headerLogo,
-.logoImage,
-.headerLogoImage {
+/* Header logo — Jellyfin sets it as a CSS background on this class */
+.pageTitleWithDefaultLogo,
+.pageTitleWithLogo {
+  background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  min-width: 8em !important;
+  min-height: 2.5em !important;
+}
+
+/* Hide any fallback text inside the logo element */
+.pageTitleWithDefaultLogo::before,
+.pageTitleWithLogo::before { content: none !important; }
+
+/* Login page — inject logo above the form via ::before on the page */
+#loginPage::before {
+  content: "" !important;
+  display: block !important;
+  width: 12em !important;
+  height: 4em !important;
   background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
-}
-
-/* Hide any child img inside logo containers — JS replaces them,
-   CSS hides them in case JS hasn't fired yet */
-.headerLogo img,
-.logoImage img,
-.headerLogoImage img {
-  opacity: 0;
+  margin: 0 auto 1.5em !important;
+  position: absolute !important;
+  top: 2em !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
 }
