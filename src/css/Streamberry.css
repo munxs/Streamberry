@@ -3226,8 +3226,25 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 
 /* ══════════════════════════════════════════════════════════════
    SB LIBRARY OVERLAY — Moonfin-style
-   Full-screen overlay injected over Jellyfin's native library page
    ══════════════════════════════════════════════════════════════ */
+
+/* Flash fix: instantly hide the native library/favorites page
+   before our overlay renders */
+.itemsTab,
+.libraryPage,
+#favoritesPage,
+.page:has(.favoritesTab) {
+  visibility: hidden !important;
+}
+
+/* But keep it visible when our overlay is NOT active
+   (overlay adds .sb-overlay-active to body) */
+body:not(.sb-overlay-active) .itemsTab,
+body:not(.sb-overlay-active) .libraryPage,
+body:not(.sb-overlay-active) #favoritesPage,
+body:not(.sb-overlay-active) .page:has(.favoritesTab) {
+  visibility: visible !important;
+}
 
 .sb-library-overlay {
   position: fixed;
@@ -3236,30 +3253,26 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   width: 100%;
   height: 100%;
   z-index: 9000;
-  background: #141414;
+  background: #1a1a2a;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
+  visibility: hidden !important;
+  transition: opacity 0.2s ease;
 }
 
 .sb-library-overlay.sb-visible {
   opacity: 1;
-  visibility: visible;
+  visibility: visible !important;
 }
 
-/* ── Header: Title + Count ── */
+/* ── Header ── */
 .sb-lib-header {
   display: flex;
   align-items: baseline;
   gap: 12px;
   padding: 28px 32px 0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: #141414;
 }
 
 .sb-lib-title {
@@ -3273,18 +3286,25 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 
 .sb-lib-count {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255,255,255,0.45);
   font-weight: 400;
   white-space: nowrap;
 }
 
-/* ── Toolbar: Sort + Filter + Alphabet ── */
+/* ── Toolbar ── */
 .sb-lib-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 14px 32px 10px;
   flex-wrap: nowrap;
+}
+
+.sb-lib-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .sb-lib-btn {
@@ -3294,7 +3314,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   padding: 7px 14px;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255,255,255,0.10);
   color: #e5e5e5;
   font-size: 13px;
   font-weight: 500;
@@ -3306,23 +3326,17 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   -webkit-tap-highlight-color: transparent;
 }
 
-.sb-lib-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
+.sb-lib-btn:hover { background: rgba(255,255,255,0.18); }
+.sb-lib-btn .material-icons { font-size: 17px; line-height: 1; }
 
-.sb-lib-btn .material-icons {
-  font-size: 17px;
-  line-height: 1;
-}
-
-/* ── Alphabet nav ── */
+/* ── Alphabet — centered ── */
 .sb-lib-alpha-nav {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-wrap: wrap;
   flex: 1;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .sb-lib-alpha-btn {
@@ -3333,8 +3347,8 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   height: 28px;
   border: none;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.55);
   font-size: 12px;
   font-weight: 600;
   font-family: "Inter", sans-serif;
@@ -3343,21 +3357,18 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   -webkit-tap-highlight-color: transparent;
 }
 
-.sb-lib-alpha-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
+.sb-lib-alpha-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
 .sb-lib-alpha-btn.sb-active {
-  background: var(--accent, rgb(229, 9, 20));
+  background: var(--accent, rgb(229,9,20));
   color: #fff;
 }
 
 /* ── Grid ── */
 .sb-lib-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
   padding: 12px 32px 40px;
 }
 
@@ -3369,13 +3380,8 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   transition: transform 0.2s ease;
 }
 
-.sb-lib-card:hover {
-  transform: scale(1.04);
-}
-
-.sb-lib-card:hover .sb-lib-card-img {
-  border-color: rgba(255, 255, 255, 0.45);
-}
+.sb-lib-card:hover { transform: scale(1.04); }
+.sb-lib-card:hover .sb-lib-card-img { border-color: rgba(255,255,255,0.45); }
 
 .sb-lib-card-poster {
   position: relative;
@@ -3383,7 +3389,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255,255,255,0.05);
 }
 
 .sb-lib-card-img {
@@ -3402,40 +3408,32 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255,255,255,0.05);
   border-radius: 8px;
 }
 
-.sb-lib-card-no-img .material-icons {
-  font-size: 48px;
-  color: rgba(255, 255, 255, 0.2);
-}
+.sb-lib-card-no-img .material-icons { font-size: 36px; color: rgba(255,255,255,0.2); }
 
-/* Type badge */
+/* Red badges for all types */
 .sb-lib-badge {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  font-size: 9px;
+  top: 5px;
+  left: 5px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 4px;
   color: #fff;
   font-family: "Inter", sans-serif;
+  background: rgba(229,9,20,0.88);
 }
 
-.sb-lib-badge--movie  { background: rgba(0, 164, 220, 0.88); }
-.sb-lib-badge--series { background: rgba(112, 76, 215, 0.88); }
-
-/* Card info */
-.sb-lib-card-info {
-  padding: 7px 2px 0;
-}
+.sb-lib-card-info { padding: 6px 2px 0; }
 
 .sb-lib-card-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #e5e5e5;
   overflow: hidden;
@@ -3446,9 +3444,9 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 
 .sb-lib-card-meta {
   display: flex;
-  gap: 6px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  gap: 5px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
   margin-top: 2px;
   font-family: "Inter", sans-serif;
 }
@@ -3461,22 +3459,22 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   justify-content: center;
   min-height: 300px;
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255,255,255,0.35);
   font-family: "Inter", sans-serif;
 }
 
 .sb-lib-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(255, 255, 255, 0.12);
-  border-top-color: var(--accent, rgb(229, 9, 20));
+  border: 3px solid rgba(255,255,255,0.12);
+  border-top-color: var(--accent, rgb(229,9,20));
   border-radius: 50%;
   animation: sb-spin 0.75s linear infinite;
 }
 
 @keyframes sb-spin { to { transform: rotate(360deg); } }
 
-/* ── Dropdown modal ── */
+/* ── Dropdown ── */
 .sb-lib-dropdown {
   position: fixed;
   inset: 0;
@@ -3489,27 +3487,24 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   pointer-events: none;
 }
 
-.sb-lib-dropdown.sb-visible {
-  opacity: 1;
-  pointer-events: all;
-}
+.sb-lib-dropdown.sb-visible { opacity: 1; pointer-events: all; }
 
 .sb-lib-dropdown-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0,0,0,0.65);
 }
 
 .sb-lib-dropdown-box {
   position: relative;
-  background: rgba(25, 25, 35, 0.98);
+  background: rgba(25,25,40,0.98);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 14px;
   padding: 22px 28px;
   min-width: 240px;
   max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
 }
 
 .sb-lib-dropdown-title {
@@ -3528,7 +3523,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   border: none;
   border-radius: 7px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255,255,255,0.75);
   font-size: 13px;
   font-weight: 500;
   font-family: "Inter", sans-serif;
@@ -3538,15 +3533,8 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   margin-top: 3px;
 }
 
-.sb-lib-dropdown-opt:hover {
-  background: rgba(255, 255, 255, 0.10);
-  color: #fff;
-}
-
-.sb-lib-dropdown-opt.sb-active {
-  background: var(--accent, rgb(229, 9, 20));
-  color: #fff;
-}
+.sb-lib-dropdown-opt:hover { background: rgba(255,255,255,0.10); color: #fff; }
+.sb-lib-dropdown-opt.sb-active { background: var(--accent, rgb(229,9,20)); color: #fff; }
 
 /* ── Load more ── */
 .sb-lib-load-more {
@@ -3559,20 +3547,20 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .sb-lib-header  { padding: 18px 20px 0; }
-  .sb-lib-toolbar { padding: 10px 20px 8px; }
-  .sb-lib-grid    { padding: 10px 20px 32px; gap: 14px;
-                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .sb-lib-toolbar { padding: 10px 20px 8px; flex-wrap: wrap; }
+  .sb-lib-grid    { padding: 10px 20px 32px; gap: 12px;
+                    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr)); }
   .sb-lib-title   { font-size: 22px; }
   .sb-lib-alpha-nav { display: none; }
 }
 
 @media (min-width: 1400px) {
-  .sb-lib-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
+  .sb-lib-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
 
 @media (min-width: 1920px) {
   .sb-lib-header  { padding: 32px 48px 0; }
   .sb-lib-toolbar { padding: 16px 48px 12px; }
-  .sb-lib-grid    { padding: 12px 48px 48px; gap: 24px;
-                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .sb-lib-grid    { padding: 12px 48px 48px; gap: 20px;
+                    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 }

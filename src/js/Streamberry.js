@@ -1415,28 +1415,25 @@
 
 /* ═══════════════════════════════════════════════════════════
    SB LIBRARY OVERLAY — Moonfin-style
-   Intercepts Movies / TV Shows library navigation and renders
-   a full-screen overlay with:
-     • Title + item count
-     • Sort button  |  Filter button  |  A–Z alphabet
-     • Poster grid with infinite scroll
+   Covers: Movies, TV Shows, Favorites
+   Fixes: no-flash, favorites detection, filter btn, red badges,
+          centered alpha, smaller cards
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
 
-  /* ── Constants ──────────────────────────────────────────── */
   const LETTERS = ['#','A','B','C','D','E','F','G','H','I','J','K','L','M',
                    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
 
   const SORT_OPTIONS = [
-    { key: 'SortName,Ascending',          label: 'Name (A–Z)' },
-    { key: 'SortName,Descending',         label: 'Name (Z–A)' },
-    { key: 'PremiereDate,Descending',     label: 'Release Date (New)' },
-    { key: 'PremiereDate,Ascending',      label: 'Release Date (Old)' },
-    { key: 'CommunityRating,Descending',  label: 'Rating (High–Low)' },
-    { key: 'CommunityRating,Ascending',   label: 'Rating (Low–High)' },
-    { key: 'DateCreated,Descending',      label: 'Date Added (New)' },
-    { key: 'DateCreated,Ascending',       label: 'Date Added (Old)' },
+    { key: 'SortName,Ascending',         label: 'Name (A–Z)' },
+    { key: 'SortName,Descending',        label: 'Name (Z–A)' },
+    { key: 'PremiereDate,Descending',    label: 'Release Date (New)' },
+    { key: 'PremiereDate,Ascending',     label: 'Release Date (Old)' },
+    { key: 'CommunityRating,Descending', label: 'Rating (High–Low)' },
+    { key: 'CommunityRating,Ascending',  label: 'Rating (Low–High)' },
+    { key: 'DateCreated,Descending',     label: 'Date Added (New)' },
+    { key: 'DateCreated,Ascending',      label: 'Date Added (Old)' },
   ];
 
   const FILTER_OPTIONS = [
@@ -1447,7 +1444,7 @@
 
   const BATCH = 100;
 
-  /* ── State ──────────────────────────────────────────────── */
+  /* ── State ── */
   let overlay    = null;
   let visible    = false;
   let libId      = null;
@@ -1462,18 +1459,15 @@
   let loading    = false;
   let escHandler = null;
 
-  /* ── API helpers ────────────────────────────────────────── */
+  /* ── API helpers ── */
   function apiClient() {
     return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null);
   }
-
   function userId() {
     const c = apiClient();
     if (!c) return null;
-    try { return c.getCurrentUserId ? c.getCurrentUserId() : (c._currentUserId || null); }
-    catch(e) { return null; }
+    try { return c.getCurrentUserId ? c.getCurrentUserId() : (c._currentUserId || null); } catch(e) { return null; }
   }
-
   function serverUrl() {
     const c = apiClient();
     if (!c) return window.location.origin;
@@ -1482,7 +1476,6 @@
       return s.replace(/\/$/, '');
     } catch(e) { return window.location.origin; }
   }
-
   function authHeader() {
     const c = apiClient();
     if (!c) return '';
@@ -1491,129 +1484,151 @@
       return `MediaBrowser Token="${tok}"`;
     } catch(e) { return ''; }
   }
-
   function posterUrl(item) {
     if (!item.ImageTags || !item.ImageTags.Primary) return null;
-    const tag = item.ImageTags.Primary;
-    return `${serverUrl()}/Items/${item.Id}/Images/Primary?maxWidth=300&tag=${tag}&quality=90`;
+    return `${serverUrl()}/Items/${item.Id}/Images/Primary?maxWidth=280&tag=${item.ImageTags.Primary}&quality=90`;
   }
 
+  /* ── Page detection ── */
+  function currentHash() { return (location.hash || '').toLowerCase(); }
+
+  function isMoviesPage()    { return currentHash().includes('/movies'); }
+  function isTVPage()        { return currentHash().includes('/tv'); }
+  function isFavoritesPage() {
+    const h = currentHash();
+    // Jellyfin favorites: #/home.html?tab=1 or #/home?tab=1 or #/favorites
+    return h.includes('tab=1') || h.includes('/favorites') || h.includes('/favorite');
+  }
+  function isLibraryListPage() {
+    const h = currentHash();
+    return h.includes('/list') && h.includes('topparentid');
+  }
+  function isInterceptablePage() {
+    return isMoviesPage() || isTVPage() || isFavoritesPage() || isLibraryListPage();
+  }
+
+  /* ── Flash fix: immediately hide native page when navigating ── */
+  function hideNativePage() {
+    document.body.classList.add('sb-overlay-active');
+  }
+  function showNativePage() {
+    document.body.classList.remove('sb-overlay-active');
+  }
+
+  /* ── Fetch ── */
   async function fetchItems(reset) {
     if (reset) { startIdx = 0; items = []; loading = true; render(); }
 
-    const sortParts = sortKey.split(',');
+    const [sortBy, sortOrder] = sortKey.split(',');
     const inclTypes = filterKey === 'all'
       ? (colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'Movie,Series')
       : filterKey;
 
     const params = new URLSearchParams({
-      StartIndex:        startIdx,
-      Limit:             BATCH,
-      SortBy:            sortParts[0],
-      SortOrder:         sortParts[1],
-      IncludeItemTypes:  inclTypes,
-      Recursive:         'true',
-      Fields:            'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
-      ImageTypeLimit:    1,
-      EnableImageTypes:  'Primary',
-      ParentId:          libId,
-      UserId:            userId(),
+      StartIndex:       startIdx,
+      Limit:            BATCH,
+      SortBy:           sortBy,
+      SortOrder:        sortOrder,
+      IncludeItemTypes: inclTypes,
+      Recursive:        'true',
+      Fields:           'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
+      ImageTypeLimit:   1,
+      EnableImageTypes: 'Primary',
+      UserId:           userId(),
     });
+
+    if (colType === 'favorites') {
+      params.set('IsFavorite', 'true');
+    } else if (libId) {
+      params.set('ParentId', libId);
+    }
 
     if (letter && letter !== '#') params.set('NameStartsWith', letter);
     if (letter === '#')           params.set('NameLessThan', 'A');
 
-    const url = `${serverUrl()}/Items?${params}`;
-    const res = await fetch(url, { headers: { 'X-Emby-Authorization': authHeader() } });
-    const data = await res.json();
+    try {
+      const res  = await fetch(`${serverUrl()}/Items?${params}`, { headers: { 'X-Emby-Authorization': authHeader() } });
+      const data = await res.json();
+      total = data.TotalRecordCount || 0;
+      items = reset ? (data.Items || []) : items.concat(data.Items || []);
+    } catch(e) {
+      console.error('[Streamberry] fetchItems error:', e);
+    }
 
-    total = data.TotalRecordCount || 0;
-    items = reset ? (data.Items || []) : items.concat(data.Items || []);
     loading = false;
     render();
   }
 
-  /* ── Dropdown helper ────────────────────────────────────── */
+  /* ── Dropdown ── */
   function showDropdown(title, options, currentKey, onSelect) {
-    let dd = document.getElementById('sbLibDropdown');
-    if (dd) dd.remove();
-
-    dd = document.createElement('div');
+    document.getElementById('sbLibDropdown')?.remove();
+    const dd = document.createElement('div');
     dd.id = 'sbLibDropdown';
     dd.className = 'sb-lib-dropdown';
-
-    let html = `<div class="sb-lib-dropdown-backdrop"></div>
-      <div class="sb-lib-dropdown-box">
-        <div class="sb-lib-dropdown-title">${title}</div>`;
+    let html = `<div class="sb-lib-dropdown-backdrop"></div><div class="sb-lib-dropdown-box">
+      <div class="sb-lib-dropdown-title">${title}</div>`;
     options.forEach(o => {
-      html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active' : ''}" data-key="${o.key}">${o.label}</button>`;
+      html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active':''}" data-key="${o.key}">${o.label}</button>`;
     });
-    html += '</div>';
-    dd.innerHTML = html;
+    dd.innerHTML = html + '</div>';
     document.body.appendChild(dd);
-
     requestAnimationFrame(() => dd.classList.add('sb-visible'));
-
     dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => {
-      dd.classList.remove('sb-visible');
-      setTimeout(() => dd.remove(), 200);
+      dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
     });
-
     dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn => {
       btn.addEventListener('click', () => {
         onSelect(btn.dataset.key);
-        dd.classList.remove('sb-visible');
-        setTimeout(() => dd.remove(), 200);
+        dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
       });
     });
   }
 
-  /* ── Render ─────────────────────────────────────────────── */
+  /* ── Render ── */
   function render() {
     if (!overlay) return;
 
-    const sortLabel   = (SORT_OPTIONS.find(o => o.key === sortKey) || SORT_OPTIONS[0]).label;
+    const sortLabel   = (SORT_OPTIONS.find(o => o.key === sortKey)    || SORT_OPTIONS[0]).label;
     const filterLabel = (FILTER_OPTIONS.find(o => o.key === filterKey) || FILTER_OPTIONS[0]).label;
-    const showFilter  = colType !== 'movies' && colType !== 'tvshows';
 
-    let alphaHTML = LETTERS.map(l =>
-      `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active' : ''}" data-letter="${l}">${l}</button>`
+    const alphaHTML = LETTERS.map(l =>
+      `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active':''}" data-letter="${l}">${l}</button>`
     ).join('');
 
-    let gridHTML = '';
+    let bodyHTML = '';
     if (loading && items.length === 0) {
-      gridHTML = '<div class="sb-lib-loading"><div class="sb-lib-spinner"></div></div>';
-    } else if (items.length === 0) {
-      gridHTML = '<div class="sb-lib-empty">No items found</div>';
+      bodyHTML = '<div class="sb-lib-loading"><div class="sb-lib-spinner"></div></div>';
+    } else if (!loading && items.length === 0) {
+      bodyHTML = '<div class="sb-lib-empty">No items found</div>';
     } else {
-      gridHTML = '<div class="sb-lib-grid">';
+      bodyHTML = '<div class="sb-lib-grid">';
       items.forEach(item => {
-        const img   = posterUrl(item);
-        const year  = item.ProductionYear || '';
-        const rat   = item.OfficialRating || '';
-        const score = item.CommunityRating ? '★ ' + item.CommunityRating.toFixed(1) : '';
-        const badge = item.Type === 'Movie' ? 'movie' : item.Type === 'Series' ? 'series' : '';
+        const img      = posterUrl(item);
+        const year     = item.ProductionYear || '';
+        const rat      = item.OfficialRating || '';
+        const score    = item.CommunityRating ? '★ ' + item.CommunityRating.toFixed(1) : '';
         const badgeTxt = item.Type === 'Movie' ? 'MOVIE' : item.Type === 'Series' ? 'SERIES' : '';
-
-        gridHTML += `<div class="sb-lib-card" data-id="${item.Id}">
+        bodyHTML += `<div class="sb-lib-card" data-id="${item.Id}">
           <div class="sb-lib-card-poster">
-            ${img ? `<img class="sb-lib-card-img" src="${img}" alt="" loading="lazy">` : '<div class="sb-lib-card-no-img"><span class="material-icons">movie</span></div>'}
-            ${badge ? `<span class="sb-lib-badge sb-lib-badge--${badge}">${badgeTxt}</span>` : ''}
+            ${img
+              ? `<img class="sb-lib-card-img" src="${img}" alt="" loading="lazy">`
+              : `<div class="sb-lib-card-no-img"><span class="material-icons">movie</span></div>`}
+            ${badgeTxt ? `<span class="sb-lib-badge">${badgeTxt}</span>` : ''}
           </div>
           <div class="sb-lib-card-info">
-            <div class="sb-lib-card-name">${(item.Name || 'Unknown').replace(/</g,'&lt;')}</div>
+            <div class="sb-lib-card-name">${(item.Name||'Unknown').replace(/</g,'&lt;')}</div>
             <div class="sb-lib-card-meta">
-              ${year ? `<span>${year}</span>` : ''}
-              ${rat  ? `<span>${rat}</span>`  : ''}
-              ${score? `<span>${score}</span>`: ''}
+              ${year  ? `<span>${year}</span>`  : ''}
+              ${rat   ? `<span>${rat}</span>`   : ''}
+              ${score ? `<span>${score}</span>` : ''}
             </div>
           </div>
         </div>`;
       });
       if (items.length < total) {
-        gridHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
+        bodyHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
       }
-      gridHTML += '</div>';
+      bodyHTML += '</div>';
     }
 
     overlay.innerHTML = `
@@ -1622,77 +1637,65 @@
         <span class="sb-lib-count">${total > 0 ? total.toLocaleString() + ' items' : ''}</span>
       </div>
       <div class="sb-lib-toolbar">
-        <button class="sb-lib-btn" id="sbLibSort"><span class="material-icons">sort</span><span>${sortLabel}</span></button>
-        ${showFilter ? `<button class="sb-lib-btn" id="sbLibFilter"><span class="material-icons">filter_list</span><span>${filterLabel}</span></button>` : ''}
+        <div class="sb-lib-toolbar-left">
+          <button class="sb-lib-btn" id="sbLibSort">
+            <span class="material-icons">sort</span><span>${sortLabel}</span>
+          </button>
+          <button class="sb-lib-btn" id="sbLibFilter">
+            <span class="material-icons">filter_list</span><span>${filterLabel}</span>
+          </button>
+        </div>
         <div class="sb-lib-alpha-nav">${alphaHTML}</div>
       </div>
-      ${gridHTML}`;
+      ${bodyHTML}`;
 
     bindEvents();
   }
 
   function bindEvents() {
-    /* Sort */
-    overlay.querySelector('#sbLibSort')?.addEventListener('click', () => {
-      showDropdown('Sort By', SORT_OPTIONS, sortKey, key => {
-        sortKey = key; fetchItems(true);
-      });
-    });
+    overlay.querySelector('#sbLibSort')?.addEventListener('click', () =>
+      showDropdown('Sort By', SORT_OPTIONS, sortKey, k => { sortKey = k; fetchItems(true); }));
 
-    /* Filter */
-    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () => {
-      showDropdown('Filter', FILTER_OPTIONS, filterKey, key => {
-        filterKey = key; fetchItems(true);
-      });
-    });
+    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () =>
+      showDropdown('Filter', FILTER_OPTIONS, filterKey, k => { filterKey = k; fetchItems(true); }));
 
-    /* Alphabet */
-    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn => {
+    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn =>
       btn.addEventListener('click', () => {
         const l = btn.dataset.letter;
         letter = letter === l ? null : l;
         fetchItems(true);
-      });
-    });
+      }));
 
-    /* Cards */
-    overlay.querySelectorAll('.sb-lib-card').forEach(card => {
+    overlay.querySelectorAll('.sb-lib-card').forEach(card =>
       card.addEventListener('click', () => {
         const id = card.dataset.id;
         if (!id) return;
         location.href = `#!/details?id=${id}`;
         close();
-      });
-    });
+      }));
 
-    /* Load more */
     overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => {
-      startIdx = items.length;
-      fetchItems(false);
+      startIdx = items.length; fetchItems(false);
     });
 
-    /* Infinite scroll */
-    overlay._scrollH = function() {
+    overlay.addEventListener('scroll', function _scroll() {
       if (loading || items.length >= total) return;
       if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) {
-        startIdx = items.length;
-        fetchItems(false);
+        startIdx = items.length; fetchItems(false);
       }
-    };
-    overlay.addEventListener('scroll', overlay._scrollH);
+    });
 
-    /* Escape */
     if (escHandler) document.removeEventListener('keydown', escHandler);
     escHandler = e => { if (e.key === 'Escape' && visible) { e.preventDefault(); hide(); } };
     document.addEventListener('keydown', escHandler);
   }
 
-  /* ── Show / Hide ────────────────────────────────────────── */
+  /* ── Show / Hide ── */
   function show(id, name, type) {
     if (!overlay) createOverlay();
     libId     = id;
-    libName   = name || 'Library';
-    colType   = (type || '').toLowerCase();
+    libName   = name;
+    colType   = type;
     items     = [];
     total     = 0;
     startIdx  = 0;
@@ -1701,7 +1704,7 @@
     letter    = null;
     loading   = false;
     visible   = true;
-
+    hideNativePage();
     overlay.classList.add('sb-visible');
     document.body.style.overflow = 'hidden';
     fetchItems(true);
@@ -1711,129 +1714,111 @@
     visible = false;
     overlay?.classList.remove('sb-visible');
     document.body.style.overflow = '';
+    showNativePage();
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
   }
 
-  function close() {
-    hide();
-  }
+  function close() { hide(); }
 
   function createOverlay() {
+    if (overlay) return;
     overlay = document.createElement('div');
     overlay.className = 'sb-library-overlay';
     document.body.appendChild(overlay);
   }
 
-  /* ── Intercept Jellyfin library navigation ───────────────── */
-  /*
-   * Jellyfin's Movies page renders a .itemsTab with a .viewMenuBar.
-   * We watch for that page to load, grab the libraryId from the URL/API,
-   * then show our overlay on top.
-   */
-
+  /* ── Library ID resolution ── */
   function getLibIdFromHash() {
-    const hash = location.hash || '';
-    const m = hash.match(/[?&]topParentId=([^&]+)/);
+    const m = (location.hash || '').match(/[?&]topParentId=([^&]+)/i);
     return m ? m[1] : null;
   }
 
-  function getLibNameFromPage() {
-    const sel = ['.pageTitle', 'h1.pageTitle', '.libraryPage .pageTitle', '.sectionTitle'];
-    for (const s of sel) {
-      const el = document.querySelector(s);
-      if (el && el.textContent.trim()) return el.textContent.trim();
-    }
-    const hash = location.hash || '';
-    if (hash.includes('/movies'))  return 'Movies';
-    if (hash.includes('/tv'))      return 'TV Shows';
-    if (hash.includes('/music'))   return 'Music';
-    return 'Library';
-  }
-
-  function getColTypeFromHash() {
-    const hash = location.hash || '';
-    if (hash.includes('/movies'))  return 'movies';
-    if (hash.includes('/tv'))      return 'tvshows';
-    if (hash.includes('/music'))   return 'music';
-    return '';
-  }
-
-  function isLibraryHash() {
-    const h = location.hash || '';
-    return h.includes('/movies') || h.includes('/tv') ||
-           (h.includes('/list') && h.includes('topParentId'));
-  }
-
-  // Try to get the libraryId from ApiClient's item list
   async function resolveLibId() {
     const fromHash = getLibIdFromHash();
     if (fromHash) return fromHash;
-
-    const c = apiClient();
-    const uid = userId();
+    const c = apiClient(), uid = userId();
     if (!c || !uid) return null;
-
     try {
-      const url = `${serverUrl()}/Users/${uid}/Views`;
-      const res = await fetch(url, { headers: { 'X-Emby-Authorization': authHeader() } });
+      const res  = await fetch(`${serverUrl()}/Users/${uid}/Views`, { headers: { 'X-Emby-Authorization': authHeader() } });
       const data = await res.json();
-      const items = data.Items || [];
-      const hash = location.hash || '';
-      let type = '';
-      if (hash.includes('/movies'))  type = 'movies';
-      if (hash.includes('/tv'))      type = 'tvshows';
-
-      const match = items.find(v =>
-        (v.CollectionType || '').toLowerCase() === type ||
-        (v.Name || '').toLowerCase().includes(type === 'tvshows' ? 'tv' : type)
-      );
-      return match ? match.Id : (items[0] ? items[0].Id : null);
+      const views = data.Items || [];
+      const type  = isMoviesPage() ? 'movies' : isTVPage() ? 'tvshows' : '';
+      const match = views.find(v => (v.CollectionType || '').toLowerCase() === type);
+      return match ? match.Id : (views[0] ? views[0].Id : null);
     } catch(e) { return null; }
   }
 
-  let _interceptActive = false;
+  /* ── Intercept ── */
+  let _active = false;
 
   async function tryIntercept() {
-    if (!isLibraryHash()) {
-      if (_interceptActive) { hide(); _interceptActive = false; }
+    if (!isInterceptablePage()) {
+      if (_active) { hide(); _active = false; }
       return;
     }
-    if (visible) return; // already showing
+    if (visible) return;
 
-    // Wait for ApiClient to be ready
-    const c = apiClient();
-    const uid = userId();
-    if (!c || !uid) return;
+    // Flash fix: hide native page immediately, before API call
+    hideNativePage();
 
-    _interceptActive = true;
-    const id   = await resolveLibId();
-    const name = getLibNameFromPage() || (location.hash.includes('/movies') ? 'Movies' : 'TV Shows');
-    const type = getColTypeFromHash();
+    const c = apiClient(), uid = userId();
+    if (!c || !uid) {
+      // Not ready yet — poll briefly
+      let tries = 0;
+      const poll = setInterval(() => {
+        if (++tries > 20) { clearInterval(poll); showNativePage(); return; }
+        const cc = apiClient(), uu = userId();
+        if (cc && uu) { clearInterval(poll); _doIntercept(); }
+      }, 250);
+      return;
+    }
+    _doIntercept();
+  }
 
-    if (!id) {
-      // Can't get library ID — don't intercept, let Jellyfin render natively
-      _interceptActive = false;
+  async function _doIntercept() {
+    _active = true;
+
+    if (isFavoritesPage()) {
+      show(null, 'Favorites', 'favorites');
       return;
     }
 
+    const id = await resolveLibId();
+    if (!id) { _active = false; showNativePage(); return; }
+
+    const type = isMoviesPage() ? 'movies' : isTVPage() ? 'tvshows' : '';
+    const name = type === 'movies' ? 'Movies' : type === 'tvshows' ? 'TV Shows' : 'Library';
     show(id, name, type);
   }
 
-  /* ── Boot ───────────────────────────────────────────────── */
+  /* ── Boot ── */
   createOverlay();
 
+  // Flash fix: intercept navigation IMMEDIATELY on hashchange, before Jellyfin renders
   window.addEventListener('hashchange', () => {
-    _interceptActive = false;
+    _active = false;
     if (visible) hide();
-    setTimeout(tryIntercept, 400);
+    if (isInterceptablePage()) hideNativePage(); // instant hide
+    setTimeout(tryIntercept, 300);
   });
 
   window.addEventListener('popstate', () => {
-    setTimeout(tryIntercept, 400);
+    if (isInterceptablePage()) hideNativePage();
+    setTimeout(tryIntercept, 300);
   });
 
-  // Initial load
-  const _boot = () => setTimeout(tryIntercept, 800);
+  // Watch for Jellyfin SPA page changes via MutationObserver as backup
+  new MutationObserver(() => {
+    if (isInterceptablePage() && !visible) {
+      hideNativePage();
+    }
+  }).observe(document.body, { childList: true, subtree: false });
+
+  const _boot = () => {
+    if (isInterceptablePage()) hideNativePage();
+    setTimeout(tryIntercept, 800);
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _boot);
   } else {
