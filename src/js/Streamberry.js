@@ -1415,7 +1415,9 @@
 
 /* ═══════════════════════════════════════════════════════════
    SB LIBRARY OVERLAY — Moonfin-style
-   Flash-free via body class added on hashchange before paint.
+   Covers: Movies, TV Shows, Favorites
+   Fixes: no-flash, favorites detection, filter btn, red badges,
+          centered alpha, smaller cards
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -1441,7 +1443,6 @@
   ];
 
   const BATCH = 100;
-  const BODY_CLASS = 'sb-lib-page';
 
   /* ── State ── */
   let overlay    = null;
@@ -1459,18 +1460,29 @@
   let escHandler = null;
 
   /* ── API helpers ── */
-  function apiClient() { return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null); }
+  function apiClient() {
+    return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null);
+  }
   function userId() {
-    const c = apiClient(); if (!c) return null;
+    const c = apiClient();
+    if (!c) return null;
     try { return c.getCurrentUserId ? c.getCurrentUserId() : (c._currentUserId || null); } catch(e) { return null; }
   }
   function serverUrl() {
-    const c = apiClient(); if (!c) return window.location.origin;
-    try { const s = c.serverAddress ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin); return s.replace(/\/$/, ''); } catch(e) { return window.location.origin; }
+    const c = apiClient();
+    if (!c) return window.location.origin;
+    try {
+      const s = c.serverAddress ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin);
+      return s.replace(/\/$/, '');
+    } catch(e) { return window.location.origin; }
   }
   function authHeader() {
-    const c = apiClient(); if (!c) return '';
-    try { const tok = c.accessToken ? c.accessToken() : (c._accessToken || c.token || ''); return `MediaBrowser Token="${tok}"`; } catch(e) { return ''; }
+    const c = apiClient();
+    if (!c) return '';
+    try {
+      const tok = c.accessToken ? c.accessToken() : (c._accessToken || c.token || '');
+      return `MediaBrowser Token="${tok}"`;
+    } catch(e) { return ''; }
   }
   function posterUrl(item) {
     if (!item.ImageTags || !item.ImageTags.Primary) return null;
@@ -1478,40 +1490,71 @@
   }
 
   /* ── Page detection ── */
-  function h() { return (location.hash || '').toLowerCase(); }
-  function isMoviesPage()    { return h().includes('/movies'); }
-  function isTVPage()        { return h().includes('/tv'); }
-  function isFavoritesPage() { return h().includes('tab=1') || h().includes('/favorites') || h().includes('/favorite'); }
-  function isInterceptable() { return isMoviesPage() || isTVPage() || isFavoritesPage(); }
+  function currentHash() { return (location.hash || '').toLowerCase(); }
 
-  /* ── Body class controls the CSS flash shield ── */
-  function engageShield()  { document.body.classList.add(BODY_CLASS); }
-  function releaseShield() { document.body.classList.remove(BODY_CLASS); }
+  function isMoviesPage()    { return currentHash().includes('/movies'); }
+  function isTVPage()        { return currentHash().includes('/tv'); }
+  function isFavoritesPage() {
+    const h = currentHash();
+    // Jellyfin favorites: #/home.html?tab=1 or #/home?tab=1 or #/favorites
+    return h.includes('tab=1') || h.includes('/favorites') || h.includes('/favorite');
+  }
+  function isLibraryListPage() {
+    const h = currentHash();
+    return h.includes('/list') && h.includes('topparentid');
+  }
+  function isInterceptablePage() {
+    return isMoviesPage() || isTVPage() || isFavoritesPage() || isLibraryListPage();
+  }
+
+  /* ── Flash fix: immediately hide native page when navigating ── */
+  function hideNativePage() {
+    document.body.classList.add('sb-overlay-active');
+  }
+  function showNativePage() {
+    document.body.classList.remove('sb-overlay-active');
+  }
 
   /* ── Fetch ── */
   async function fetchItems(reset) {
     if (reset) { startIdx = 0; items = []; loading = true; render(); }
+
     const [sortBy, sortOrder] = sortKey.split(',');
     const inclTypes = filterKey === 'all'
       ? (colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'Movie,Series')
       : filterKey;
+
     const params = new URLSearchParams({
-      StartIndex: startIdx, Limit: BATCH,
-      SortBy: sortBy, SortOrder: sortOrder,
-      IncludeItemTypes: inclTypes, Recursive: 'true',
-      Fields: 'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
-      ImageTypeLimit: 1, EnableImageTypes: 'Primary', UserId: userId(),
+      StartIndex:       startIdx,
+      Limit:            BATCH,
+      SortBy:           sortBy,
+      SortOrder:        sortOrder,
+      IncludeItemTypes: inclTypes,
+      Recursive:        'true',
+      Fields:           'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
+      ImageTypeLimit:   1,
+      EnableImageTypes: 'Primary',
+      UserId:           userId(),
     });
-    if (colType === 'favorites') params.set('IsFavorite', 'true');
-    else if (libId)              params.set('ParentId', libId);
+
+    if (colType === 'favorites') {
+      params.set('IsFavorite', 'true');
+    } else if (libId) {
+      params.set('ParentId', libId);
+    }
+
     if (letter && letter !== '#') params.set('NameStartsWith', letter);
     if (letter === '#')           params.set('NameLessThan', 'A');
+
     try {
       const res  = await fetch(`${serverUrl()}/Items?${params}`, { headers: { 'X-Emby-Authorization': authHeader() } });
       const data = await res.json();
       total = data.TotalRecordCount || 0;
       items = reset ? (data.Items || []) : items.concat(data.Items || []);
-    } catch(e) { console.error('[Streamberry] fetchItems:', e); }
+    } catch(e) {
+      console.error('[Streamberry] fetchItems error:', e);
+    }
+
     loading = false;
     render();
   }
@@ -1520,22 +1563,37 @@
   function showDropdown(title, options, currentKey, onSelect) {
     document.getElementById('sbLibDropdown')?.remove();
     const dd = document.createElement('div');
-    dd.id = 'sbLibDropdown'; dd.className = 'sb-lib-dropdown';
-    let html = `<div class="sb-lib-dropdown-backdrop"></div><div class="sb-lib-dropdown-box"><div class="sb-lib-dropdown-title">${title}</div>`;
-    options.forEach(o => { html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active':''}" data-key="${o.key}">${o.label}</button>`; });
+    dd.id = 'sbLibDropdown';
+    dd.className = 'sb-lib-dropdown';
+    let html = `<div class="sb-lib-dropdown-backdrop"></div><div class="sb-lib-dropdown-box">
+      <div class="sb-lib-dropdown-title">${title}</div>`;
+    options.forEach(o => {
+      html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active':''}" data-key="${o.key}">${o.label}</button>`;
+    });
     dd.innerHTML = html + '</div>';
     document.body.appendChild(dd);
     requestAnimationFrame(() => dd.classList.add('sb-visible'));
-    dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => { dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200); });
-    dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn => btn.addEventListener('click', () => { onSelect(btn.dataset.key); dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200); }));
+    dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => {
+      dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
+    });
+    dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        onSelect(btn.dataset.key);
+        dd.classList.remove('sb-visible'); setTimeout(() => dd.remove(), 200);
+      });
+    });
   }
 
   /* ── Render ── */
   function render() {
     if (!overlay) return;
+
     const sortLabel   = (SORT_OPTIONS.find(o => o.key === sortKey)    || SORT_OPTIONS[0]).label;
     const filterLabel = (FILTER_OPTIONS.find(o => o.key === filterKey) || FILTER_OPTIONS[0]).label;
-    const alphaHTML   = LETTERS.map(l => `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active':''}" data-letter="${l}">${l}</button>`).join('');
+
+    const alphaHTML = LETTERS.map(l =>
+      `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active':''}" data-letter="${l}">${l}</button>`
+    ).join('');
 
     let bodyHTML = '';
     if (loading && items.length === 0) {
@@ -1545,25 +1603,31 @@
     } else {
       bodyHTML = '<div class="sb-lib-grid">';
       items.forEach(item => {
-        const img   = posterUrl(item);
-        const year  = item.ProductionYear || '';
-        const rat   = item.OfficialRating || '';
-        const score = item.CommunityRating ? '★ ' + item.CommunityRating.toFixed(1) : '';
-        const badge = item.Type === 'Movie' ? 'MOVIE' : item.Type === 'Series' ? 'SERIES' : '';
+        const img      = posterUrl(item);
+        const year     = item.ProductionYear || '';
+        const rat      = item.OfficialRating || '';
+        const score    = item.CommunityRating ? '★ ' + item.CommunityRating.toFixed(1) : '';
+        const badgeTxt = item.Type === 'Movie' ? 'MOVIE' : item.Type === 'Series' ? 'SERIES' : '';
         bodyHTML += `<div class="sb-lib-card" data-id="${item.Id}">
           <div class="sb-lib-card-poster">
-            ${img ? `<img class="sb-lib-card-img" src="${img}" alt="" loading="lazy">` : `<div class="sb-lib-card-no-img"><span class="material-icons">movie</span></div>`}
-            ${badge ? `<span class="sb-lib-badge">${badge}</span>` : ''}
+            ${img
+              ? `<img class="sb-lib-card-img" src="${img}" alt="" loading="lazy">`
+              : `<div class="sb-lib-card-no-img"><span class="material-icons">movie</span></div>`}
+            ${badgeTxt ? `<span class="sb-lib-badge">${badgeTxt}</span>` : ''}
           </div>
           <div class="sb-lib-card-info">
             <div class="sb-lib-card-name">${(item.Name||'Unknown').replace(/</g,'&lt;')}</div>
             <div class="sb-lib-card-meta">
-              ${year?`<span>${year}</span>`:''}${rat?`<span>${rat}</span>`:''}${score?`<span>${score}</span>`:''}
+              ${year  ? `<span>${year}</span>`  : ''}
+              ${rat   ? `<span>${rat}</span>`   : ''}
+              ${score ? `<span>${score}</span>` : ''}
             </div>
           </div>
         </div>`;
       });
-      if (items.length < total) bodyHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
+      if (items.length < total) {
+        bodyHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
+      }
       bodyHTML += '</div>';
     }
 
@@ -1574,8 +1638,12 @@
       </div>
       <div class="sb-lib-toolbar">
         <div class="sb-lib-toolbar-left">
-          <button class="sb-lib-btn" id="sbLibSort"><span class="material-icons">sort</span><span>${sortLabel}</span></button>
-          <button class="sb-lib-btn" id="sbLibFilter"><span class="material-icons">filter_list</span><span>${filterLabel}</span></button>
+          <button class="sb-lib-btn" id="sbLibSort">
+            <span class="material-icons">sort</span><span>${sortLabel}</span>
+          </button>
+          <button class="sb-lib-btn" id="sbLibFilter">
+            <span class="material-icons">filter_list</span><span>${filterLabel}</span>
+          </button>
         </div>
         <div class="sb-lib-alpha-nav">${alphaHTML}</div>
       </div>
@@ -1585,15 +1653,38 @@
   }
 
   function bindEvents() {
-    overlay.querySelector('#sbLibSort')?.addEventListener('click', () => showDropdown('Sort By', SORT_OPTIONS, sortKey, k => { sortKey = k; fetchItems(true); }));
-    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () => showDropdown('Filter', FILTER_OPTIONS, filterKey, k => { filterKey = k; fetchItems(true); }));
-    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn => btn.addEventListener('click', () => { const l = btn.dataset.letter; letter = letter === l ? null : l; fetchItems(true); }));
-    overlay.querySelectorAll('.sb-lib-card').forEach(card => card.addEventListener('click', () => { const id = card.dataset.id; if (!id) return; hide(); location.href = `#!/details?id=${id}`; }));
-    overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => { startIdx = items.length; fetchItems(false); });
-    overlay.addEventListener('scroll', () => {
-      if (loading || items.length >= total) return;
-      if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) { startIdx = items.length; fetchItems(false); }
+    overlay.querySelector('#sbLibSort')?.addEventListener('click', () =>
+      showDropdown('Sort By', SORT_OPTIONS, sortKey, k => { sortKey = k; fetchItems(true); }));
+
+    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () =>
+      showDropdown('Filter', FILTER_OPTIONS, filterKey, k => { filterKey = k; fetchItems(true); }));
+
+    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const l = btn.dataset.letter;
+        letter = letter === l ? null : l;
+        fetchItems(true);
+      }));
+
+    overlay.querySelectorAll('.sb-lib-card').forEach(card =>
+      card.addEventListener('click', () => {
+        const id = card.dataset.id;
+        if (!id) return;
+        location.href = `#!/details?id=${id}`;
+        close();
+      }));
+
+    overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => {
+      startIdx = items.length; fetchItems(false);
     });
+
+    overlay.addEventListener('scroll', function _scroll() {
+      if (loading || items.length >= total) return;
+      if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) {
+        startIdx = items.length; fetchItems(false);
+      }
+    });
+
     if (escHandler) document.removeEventListener('keydown', escHandler);
     escHandler = e => { if (e.key === 'Escape' && visible) { e.preventDefault(); hide(); } };
     document.addEventListener('keydown', escHandler);
@@ -1601,11 +1692,19 @@
 
   /* ── Show / Hide ── */
   function show(id, name, type) {
-    libId = id; libName = name; colType = type;
-    items = []; total = 0; startIdx = 0;
+    if (!overlay) createOverlay();
+    libId     = id;
+    libName   = name;
+    colType   = type;
+    items     = [];
+    total     = 0;
+    startIdx  = 0;
     sortKey   = 'SortName,Ascending';
     filterKey = colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'all';
-    letter = null; loading = false; visible = true;
+    letter    = null;
+    loading   = false;
+    visible   = true;
+    hideNativePage();
     overlay.classList.add('sb-visible');
     document.body.style.overflow = 'hidden';
     fetchItems(true);
@@ -1615,9 +1714,11 @@
     visible = false;
     overlay?.classList.remove('sb-visible');
     document.body.style.overflow = '';
-    releaseShield();
+    showNativePage();
     if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
   }
+
+  function close() { hide(); }
 
   function createOverlay() {
     if (overlay) return;
@@ -1651,57 +1752,77 @@
   let _active = false;
 
   async function tryIntercept() {
-    if (!isInterceptable()) {
+    if (!isInterceptablePage()) {
       if (_active) { hide(); _active = false; }
       return;
     }
     if (visible) return;
-    _active = true;
-    engageShield(); // ← hide native page NOW, before API call
 
-    // Wait for ApiClient
-    if (!apiClient() || !userId()) {
+    // Flash fix: hide native page immediately, before API call
+    hideNativePage();
+
+    const c = apiClient(), uid = userId();
+    if (!c || !uid) {
+      // Not ready yet — poll briefly
       let tries = 0;
-      await new Promise(resolve => {
-        const poll = setInterval(() => {
-          if ((apiClient() && userId()) || ++tries > 30) { clearInterval(poll); resolve(); }
-        }, 200);
-      });
+      const poll = setInterval(() => {
+        if (++tries > 20) { clearInterval(poll); showNativePage(); return; }
+        const cc = apiClient(), uu = userId();
+        if (cc && uu) { clearInterval(poll); _doIntercept(); }
+      }, 250);
+      return;
+    }
+    _doIntercept();
+  }
+
+  async function _doIntercept() {
+    _active = true;
+
+    if (isFavoritesPage()) {
+      show(null, 'Favorites', 'favorites');
+      return;
     }
 
-    if (!apiClient() || !userId()) { _active = false; releaseShield(); return; }
-
-    if (isFavoritesPage()) { show(null, 'Favorites', 'favorites'); return; }
-
     const id = await resolveLibId();
-    if (!id) { _active = false; releaseShield(); return; }
+    if (!id) { _active = false; showNativePage(); return; }
 
     const type = isMoviesPage() ? 'movies' : isTVPage() ? 'tvshows' : '';
-    show(id, type === 'movies' ? 'Movies' : 'TV Shows', type);
+    const name = type === 'movies' ? 'Movies' : type === 'tvshows' ? 'TV Shows' : 'Library';
+    show(id, name, type);
   }
 
   /* ── Boot ── */
   createOverlay();
 
-  // Engage shield IMMEDIATELY on hashchange — before Jellyfin renders anything
+  // Flash fix: intercept navigation IMMEDIATELY on hashchange, before Jellyfin renders
   window.addEventListener('hashchange', () => {
-    if (visible) hide();
     _active = false;
-    if (isInterceptable()) engageShield();
-    setTimeout(tryIntercept, 200);
-  }, true); // capture phase — fires before Jellyfin's own listener
+    if (visible) hide();
+    if (isInterceptablePage()) hideNativePage(); // instant hide
+    setTimeout(tryIntercept, 300);
+  });
 
   window.addEventListener('popstate', () => {
-    if (isInterceptable()) engageShield();
-    setTimeout(tryIntercept, 200);
-  }, true);
+    if (isInterceptablePage()) hideNativePage();
+    setTimeout(tryIntercept, 300);
+  });
+
+  // Watch for Jellyfin SPA page changes via MutationObserver as backup
+  new MutationObserver(() => {
+    if (isInterceptablePage() && !visible) {
+      hideNativePage();
+    }
+  }).observe(document.body, { childList: true, subtree: false });
 
   const _boot = () => {
-    if (isInterceptable()) engageShield();
-    setTimeout(tryIntercept, 700);
+    if (isInterceptablePage()) hideNativePage();
+    setTimeout(tryIntercept, 800);
   };
 
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', _boot); }
-  else { _boot(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _boot);
+  } else {
+    _boot();
+  }
 
 })();
