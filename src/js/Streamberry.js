@@ -1414,234 +1414,430 @@
 })();
 
 /* ═══════════════════════════════════════════════════════════
-   LIBRARY PAGE HEADER — Moonfin-style (pure inject)
-   Row 1: Title  N items
-   Row 2: [≡ Sort]  [≡ Filter]   # A B C … Z
+   SB LIBRARY OVERLAY — Moonfin-style
+   Intercepts Movies / TV Shows library navigation and renders
+   a full-screen overlay with:
+     • Title + item count
+     • Sort button  |  Filter button  |  A–Z alphabet
+     • Poster grid with infinite scroll
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
 
-  const HDR_ID      = "sbLibHdr";
-  const CTRL_ID     = "sbLibControls";
-  const ALPHA_CHARS = ["#","A","B","C","D","E","F","G","H","I","J","K","L","M",
-                       "N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+  /* ── Constants ──────────────────────────────────────────── */
+  const LETTERS = ['#','A','B','C','D','E','F','G','H','I','J','K','L','M',
+                   'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
 
-  /* ── Helpers ─────────────────────────────────────────────── */
-  function isLibraryPage() {
-    return !!(
-      document.querySelector(".itemsTab .viewMenuBar") ||
-      document.querySelector(".libraryPage .viewMenuBar")
-    );
+  const SORT_OPTIONS = [
+    { key: 'SortName,Ascending',          label: 'Name (A–Z)' },
+    { key: 'SortName,Descending',         label: 'Name (Z–A)' },
+    { key: 'PremiereDate,Descending',     label: 'Release Date (New)' },
+    { key: 'PremiereDate,Ascending',      label: 'Release Date (Old)' },
+    { key: 'CommunityRating,Descending',  label: 'Rating (High–Low)' },
+    { key: 'CommunityRating,Ascending',   label: 'Rating (Low–High)' },
+    { key: 'DateCreated,Descending',      label: 'Date Added (New)' },
+    { key: 'DateCreated,Ascending',       label: 'Date Added (Old)' },
+  ];
+
+  const FILTER_OPTIONS = [
+    { key: 'all',    label: 'All' },
+    { key: 'Movie',  label: 'Movies' },
+    { key: 'Series', label: 'TV Shows' },
+  ];
+
+  const BATCH = 100;
+
+  /* ── State ──────────────────────────────────────────────── */
+  let overlay    = null;
+  let visible    = false;
+  let libId      = null;
+  let libName    = '';
+  let colType    = '';
+  let items      = [];
+  let total      = 0;
+  let startIdx   = 0;
+  let sortKey    = 'SortName,Ascending';
+  let filterKey  = 'all';
+  let letter     = null;
+  let loading    = false;
+  let escHandler = null;
+
+  /* ── API helpers ────────────────────────────────────────── */
+  function apiClient() {
+    return window.ApiClient || (typeof ApiClient !== 'undefined' ? ApiClient : null);
   }
 
-  function getViewMenuBar() {
-    return (
-      document.querySelector(".itemsTab .viewMenuBar") ||
-      document.querySelector(".libraryPage .viewMenuBar")
-    );
+  function userId() {
+    const c = apiClient();
+    if (!c) return null;
+    try { return c.getCurrentUserId ? c.getCurrentUserId() : (c._currentUserId || null); }
+    catch(e) { return null; }
   }
 
-  function getLibraryName() {
-    // Try native page title elements (Jellyfin renders these)
-    const sel = [
-      ".itemsTab .pageTitle",
-      ".libraryPage .pageTitle",
-      ".sectionTitleContainer .pageTitle",
-      "h1.pageTitle",
-      ".sectionTitle"
-    ];
+  function serverUrl() {
+    const c = apiClient();
+    if (!c) return window.location.origin;
+    try {
+      const s = c.serverAddress ? c.serverAddress() : (c._serverAddress || c.serverUrl || window.location.origin);
+      return s.replace(/\/$/, '');
+    } catch(e) { return window.location.origin; }
+  }
+
+  function authHeader() {
+    const c = apiClient();
+    if (!c) return '';
+    try {
+      const tok = c.accessToken ? c.accessToken() : (c._accessToken || c.token || '');
+      return `MediaBrowser Token="${tok}"`;
+    } catch(e) { return ''; }
+  }
+
+  function posterUrl(item) {
+    if (!item.ImageTags || !item.ImageTags.Primary) return null;
+    const tag = item.ImageTags.Primary;
+    return `${serverUrl()}/Items/${item.Id}/Images/Primary?maxWidth=300&tag=${tag}&quality=90`;
+  }
+
+  async function fetchItems(reset) {
+    if (reset) { startIdx = 0; items = []; loading = true; render(); }
+
+    const sortParts = sortKey.split(',');
+    const inclTypes = filterKey === 'all'
+      ? (colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'Movie,Series')
+      : filterKey;
+
+    const params = new URLSearchParams({
+      StartIndex:        startIdx,
+      Limit:             BATCH,
+      SortBy:            sortParts[0],
+      SortOrder:         sortParts[1],
+      IncludeItemTypes:  inclTypes,
+      Recursive:         'true',
+      Fields:            'PrimaryImageAspectRatio,CommunityRating,OfficialRating,ProductionYear',
+      ImageTypeLimit:    1,
+      EnableImageTypes:  'Primary',
+      ParentId:          libId,
+      UserId:            userId(),
+    });
+
+    if (letter && letter !== '#') params.set('NameStartsWith', letter);
+    if (letter === '#')           params.set('NameLessThan', 'A');
+
+    const url = `${serverUrl()}/Items?${params}`;
+    const res = await fetch(url, { headers: { 'X-Emby-Authorization': authHeader() } });
+    const data = await res.json();
+
+    total = data.TotalRecordCount || 0;
+    items = reset ? (data.Items || []) : items.concat(data.Items || []);
+    loading = false;
+    render();
+  }
+
+  /* ── Dropdown helper ────────────────────────────────────── */
+  function showDropdown(title, options, currentKey, onSelect) {
+    let dd = document.getElementById('sbLibDropdown');
+    if (dd) dd.remove();
+
+    dd = document.createElement('div');
+    dd.id = 'sbLibDropdown';
+    dd.className = 'sb-lib-dropdown';
+
+    let html = `<div class="sb-lib-dropdown-backdrop"></div>
+      <div class="sb-lib-dropdown-box">
+        <div class="sb-lib-dropdown-title">${title}</div>`;
+    options.forEach(o => {
+      html += `<button class="sb-lib-dropdown-opt${o.key === currentKey ? ' sb-active' : ''}" data-key="${o.key}">${o.label}</button>`;
+    });
+    html += '</div>';
+    dd.innerHTML = html;
+    document.body.appendChild(dd);
+
+    requestAnimationFrame(() => dd.classList.add('sb-visible'));
+
+    dd.querySelector('.sb-lib-dropdown-backdrop').addEventListener('click', () => {
+      dd.classList.remove('sb-visible');
+      setTimeout(() => dd.remove(), 200);
+    });
+
+    dd.querySelectorAll('.sb-lib-dropdown-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        onSelect(btn.dataset.key);
+        dd.classList.remove('sb-visible');
+        setTimeout(() => dd.remove(), 200);
+      });
+    });
+  }
+
+  /* ── Render ─────────────────────────────────────────────── */
+  function render() {
+    if (!overlay) return;
+
+    const sortLabel   = (SORT_OPTIONS.find(o => o.key === sortKey) || SORT_OPTIONS[0]).label;
+    const filterLabel = (FILTER_OPTIONS.find(o => o.key === filterKey) || FILTER_OPTIONS[0]).label;
+    const showFilter  = colType !== 'movies' && colType !== 'tvshows';
+
+    let alphaHTML = LETTERS.map(l =>
+      `<button class="sb-lib-alpha-btn${letter === l ? ' sb-active' : ''}" data-letter="${l}">${l}</button>`
+    ).join('');
+
+    let gridHTML = '';
+    if (loading && items.length === 0) {
+      gridHTML = '<div class="sb-lib-loading"><div class="sb-lib-spinner"></div></div>';
+    } else if (items.length === 0) {
+      gridHTML = '<div class="sb-lib-empty">No items found</div>';
+    } else {
+      gridHTML = '<div class="sb-lib-grid">';
+      items.forEach(item => {
+        const img   = posterUrl(item);
+        const year  = item.ProductionYear || '';
+        const rat   = item.OfficialRating || '';
+        const score = item.CommunityRating ? '★ ' + item.CommunityRating.toFixed(1) : '';
+        const badge = item.Type === 'Movie' ? 'movie' : item.Type === 'Series' ? 'series' : '';
+        const badgeTxt = item.Type === 'Movie' ? 'MOVIE' : item.Type === 'Series' ? 'SERIES' : '';
+
+        gridHTML += `<div class="sb-lib-card" data-id="${item.Id}">
+          <div class="sb-lib-card-poster">
+            ${img ? `<img class="sb-lib-card-img" src="${img}" alt="" loading="lazy">` : '<div class="sb-lib-card-no-img"><span class="material-icons">movie</span></div>'}
+            ${badge ? `<span class="sb-lib-badge sb-lib-badge--${badge}">${badgeTxt}</span>` : ''}
+          </div>
+          <div class="sb-lib-card-info">
+            <div class="sb-lib-card-name">${(item.Name || 'Unknown').replace(/</g,'&lt;')}</div>
+            <div class="sb-lib-card-meta">
+              ${year ? `<span>${year}</span>` : ''}
+              ${rat  ? `<span>${rat}</span>`  : ''}
+              ${score? `<span>${score}</span>`: ''}
+            </div>
+          </div>
+        </div>`;
+      });
+      if (items.length < total) {
+        gridHTML += `<div class="sb-lib-load-more"><button class="sb-lib-btn" id="sbLibLoadMore">Load More</button></div>`;
+      }
+      gridHTML += '</div>';
+    }
+
+    overlay.innerHTML = `
+      <div class="sb-lib-header">
+        <h1 class="sb-lib-title">${libName}</h1>
+        <span class="sb-lib-count">${total > 0 ? total.toLocaleString() + ' items' : ''}</span>
+      </div>
+      <div class="sb-lib-toolbar">
+        <button class="sb-lib-btn" id="sbLibSort"><span class="material-icons">sort</span><span>${sortLabel}</span></button>
+        ${showFilter ? `<button class="sb-lib-btn" id="sbLibFilter"><span class="material-icons">filter_list</span><span>${filterLabel}</span></button>` : ''}
+        <div class="sb-lib-alpha-nav">${alphaHTML}</div>
+      </div>
+      ${gridHTML}`;
+
+    bindEvents();
+  }
+
+  function bindEvents() {
+    /* Sort */
+    overlay.querySelector('#sbLibSort')?.addEventListener('click', () => {
+      showDropdown('Sort By', SORT_OPTIONS, sortKey, key => {
+        sortKey = key; fetchItems(true);
+      });
+    });
+
+    /* Filter */
+    overlay.querySelector('#sbLibFilter')?.addEventListener('click', () => {
+      showDropdown('Filter', FILTER_OPTIONS, filterKey, key => {
+        filterKey = key; fetchItems(true);
+      });
+    });
+
+    /* Alphabet */
+    overlay.querySelectorAll('.sb-lib-alpha-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const l = btn.dataset.letter;
+        letter = letter === l ? null : l;
+        fetchItems(true);
+      });
+    });
+
+    /* Cards */
+    overlay.querySelectorAll('.sb-lib-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.id;
+        if (!id) return;
+        location.href = `#!/details?id=${id}`;
+        close();
+      });
+    });
+
+    /* Load more */
+    overlay.querySelector('#sbLibLoadMore')?.addEventListener('click', () => {
+      startIdx = items.length;
+      fetchItems(false);
+    });
+
+    /* Infinite scroll */
+    overlay._scrollH = function() {
+      if (loading || items.length >= total) return;
+      if (overlay.scrollTop + overlay.clientHeight >= overlay.scrollHeight - 500) {
+        startIdx = items.length;
+        fetchItems(false);
+      }
+    };
+    overlay.addEventListener('scroll', overlay._scrollH);
+
+    /* Escape */
+    if (escHandler) document.removeEventListener('keydown', escHandler);
+    escHandler = e => { if (e.key === 'Escape' && visible) { e.preventDefault(); hide(); } };
+    document.addEventListener('keydown', escHandler);
+  }
+
+  /* ── Show / Hide ────────────────────────────────────────── */
+  function show(id, name, type) {
+    if (!overlay) createOverlay();
+    libId     = id;
+    libName   = name || 'Library';
+    colType   = (type || '').toLowerCase();
+    items     = [];
+    total     = 0;
+    startIdx  = 0;
+    sortKey   = 'SortName,Ascending';
+    filterKey = colType === 'movies' ? 'Movie' : colType === 'tvshows' ? 'Series' : 'all';
+    letter    = null;
+    loading   = false;
+    visible   = true;
+
+    overlay.classList.add('sb-visible');
+    document.body.style.overflow = 'hidden';
+    fetchItems(true);
+  }
+
+  function hide() {
+    visible = false;
+    overlay?.classList.remove('sb-visible');
+    document.body.style.overflow = '';
+    if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
+  }
+
+  function close() {
+    hide();
+  }
+
+  function createOverlay() {
+    overlay = document.createElement('div');
+    overlay.className = 'sb-library-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  /* ── Intercept Jellyfin library navigation ───────────────── */
+  /*
+   * Jellyfin's Movies page renders a .itemsTab with a .viewMenuBar.
+   * We watch for that page to load, grab the libraryId from the URL/API,
+   * then show our overlay on top.
+   */
+
+  function getLibIdFromHash() {
+    const hash = location.hash || '';
+    const m = hash.match(/[?&]topParentId=([^&]+)/);
+    return m ? m[1] : null;
+  }
+
+  function getLibNameFromPage() {
+    const sel = ['.pageTitle', 'h1.pageTitle', '.libraryPage .pageTitle', '.sectionTitle'];
     for (const s of sel) {
       const el = document.querySelector(s);
       if (el && el.textContent.trim()) return el.textContent.trim();
     }
-    // Fallback: hash
-    const h = location.hash || "";
-    if (h.includes("/movies")) return "Movies";
-    if (h.includes("/tv"))     return "TV Shows";
-    if (h.includes("/music"))  return "Music";
-    return "";
+    const hash = location.hash || '';
+    if (hash.includes('/movies'))  return 'Movies';
+    if (hash.includes('/tv'))      return 'TV Shows';
+    if (hash.includes('/music'))   return 'Music';
+    return 'Library';
   }
 
-  function getItemCount() {
-    // Jellyfin puts count in recordCount or similar
-    const candidates = [
-      ".recordCount",
-      ".itemCountIndicator",
-      ".viewMenuBar .recordCount",
-      ".alphaPicker + * .recordCount"
-    ];
-    for (const s of candidates) {
-      const el = document.querySelector(s);
-      if (el) {
-        const n = parseInt(el.textContent.replace(/\D/g, ""), 10);
-        if (!isNaN(n) && n > 0) return n;
-      }
+  function getColTypeFromHash() {
+    const hash = location.hash || '';
+    if (hash.includes('/movies'))  return 'movies';
+    if (hash.includes('/tv'))      return 'tvshows';
+    if (hash.includes('/music'))   return 'music';
+    return '';
+  }
+
+  function isLibraryHash() {
+    const h = location.hash || '';
+    return h.includes('/movies') || h.includes('/tv') ||
+           (h.includes('/list') && h.includes('topParentId'));
+  }
+
+  // Try to get the libraryId from ApiClient's item list
+  async function resolveLibId() {
+    const fromHash = getLibIdFromHash();
+    if (fromHash) return fromHash;
+
+    const c = apiClient();
+    const uid = userId();
+    if (!c || !uid) return null;
+
+    try {
+      const url = `${serverUrl()}/Users/${uid}/Views`;
+      const res = await fetch(url, { headers: { 'X-Emby-Authorization': authHeader() } });
+      const data = await res.json();
+      const items = data.Items || [];
+      const hash = location.hash || '';
+      let type = '';
+      if (hash.includes('/movies'))  type = 'movies';
+      if (hash.includes('/tv'))      type = 'tvshows';
+
+      const match = items.find(v =>
+        (v.CollectionType || '').toLowerCase() === type ||
+        (v.Name || '').toLowerCase().includes(type === 'tvshows' ? 'tv' : type)
+      );
+      return match ? match.Id : (items[0] ? items[0].Id : null);
+    } catch(e) { return null; }
+  }
+
+  let _interceptActive = false;
+
+  async function tryIntercept() {
+    if (!isLibraryHash()) {
+      if (_interceptActive) { hide(); _interceptActive = false; }
+      return;
     }
-    // Count visible cards as last resort
-    const cards = document.querySelectorAll(".itemsContainer .card, .itemsContainer .listItem");
-    return cards.length || null;
-  }
+    if (visible) return; // already showing
 
-  /* ── Wire sort button to Jellyfin's real sort button ──────── */
-  function triggerSort() {
-    const real = document.querySelector(
-      ".btnSort, .viewMenuBar .btnSort, button[title*='Sort' i], .btnSortText"
-    );
-    if (real) real.click();
-  }
+    // Wait for ApiClient to be ready
+    const c = apiClient();
+    const uid = userId();
+    if (!c || !uid) return;
 
-  /* ── Wire filter button to Jellyfin's real filter button ──── */
-  function triggerFilter() {
-    const real = document.querySelector(
-      ".btnFilter, .viewMenuBar .btnFilter, button[title*='Filter' i]"
-    );
-    if (real) real.click();
-  }
+    _interceptActive = true;
+    const id   = await resolveLibId();
+    const name = getLibNameFromPage() || (location.hash.includes('/movies') ? 'Movies' : 'TV Shows');
+    const type = getColTypeFromHash();
 
-  /* ── Wire alphabet to Jellyfin's native alphabet picker ───── */
-  function triggerAlpha(char) {
-    // Jellyfin's alphaPicker renders buttons with data-value
-    const real = document.querySelector(
-      `.alphaPicker [data-value="${char}"], .alphaPicker button[title="${char}"]`
-    );
-    if (real) { real.click(); return; }
-    // Fallback: dispatch custom event some themes listen to
-    document.dispatchEvent(new CustomEvent("alphapicker:letterselected", { detail: { value: char } }));
-  }
-
-  function getActiveSortLabel() {
-    const btn = document.querySelector(".btnSortText, .btnSort .buttonText, .btnSort span:not(.material-icons)");
-    return btn ? btn.textContent.trim() : "Name (A-Z)";
-  }
-
-  /* ── Build the injected header ───────────────────────────── */
-  function buildHeader(bar) {
-    // ── Title row ──
-    const hdr = document.createElement("div");
-    hdr.id = HDR_ID;
-
-    const name = getLibraryName();
-    const count = getItemCount();
-
-    hdr.innerHTML = `
-      <span class="sbLibHdrName">${name}</span>
-      <span class="sbLibHdrCount">${count !== null ? count.toLocaleString() + " items" : ""}</span>`;
-
-    // ── Controls row ──
-    const ctrl = document.createElement("div");
-    ctrl.id = CTRL_ID;
-
-    // Left: sort + filter
-    const left = document.createElement("div");
-    left.className = "sbLibLeft";
-
-    const sortBtn = document.createElement("button");
-    sortBtn.className = "sbLibBtn";
-    sortBtn.innerHTML = `<span class="material-icons">sort</span><span class="sbLibBtnLabel">${getActiveSortLabel()}</span>`;
-    sortBtn.addEventListener("click", triggerSort);
-
-    const filterBtn = document.createElement("button");
-    filterBtn.className = "sbLibBtn";
-    filterBtn.innerHTML = `<span class="material-icons">filter_list</span><span>All</span>`;
-    filterBtn.addEventListener("click", triggerFilter);
-
-    left.appendChild(sortBtn);
-    left.appendChild(filterBtn);
-
-    // Right: alphabet
-    const right = document.createElement("div");
-    right.className = "sbLibRight";
-
-    ALPHA_CHARS.forEach(ch => {
-      const btn = document.createElement("button");
-      btn.className = "sbLibAlpha";
-      btn.textContent = ch;
-      btn.addEventListener("click", () => {
-        right.querySelectorAll(".sbLibAlpha").forEach(b => b.classList.remove("sbLibAlpha--active"));
-        btn.classList.add("sbLibAlpha--active");
-        triggerAlpha(ch);
-      });
-      right.appendChild(btn);
-    });
-
-    ctrl.appendChild(left);
-    ctrl.appendChild(right);
-
-    // Insert both at the TOP of the viewMenuBar
-    bar.insertBefore(ctrl, bar.firstChild);
-    bar.insertBefore(hdr, bar.firstChild);
-  }
-
-  function removeHeader() {
-    document.getElementById(HDR_ID)?.remove();
-    document.getElementById(CTRL_ID)?.remove();
-  }
-
-  /* ── Update count label after cards load ─────────────────── */
-  function refreshCount() {
-    const countEl = document.querySelector(`#${HDR_ID} .sbLibHdrCount`);
-    if (!countEl) return;
-    const count = getItemCount();
-    if (count !== null) countEl.textContent = count.toLocaleString() + " items";
-  }
-
-  /* ── Update sort label when user changes sort ────────────── */
-  function refreshSortLabel() {
-    const labelEl = document.querySelector(`#${CTRL_ID} .sbLibBtnLabel`);
-    if (!labelEl) return;
-    labelEl.textContent = getActiveSortLabel();
-  }
-
-  /* ── Main inject ─────────────────────────────────────────── */
-  function inject() {
-    if (document.getElementById(HDR_ID)) return; // already injected
-    const bar = getViewMenuBar();
-    if (!bar) return;
-    const name = getLibraryName();
-    if (!name) return;
-    buildHeader(bar);
-  }
-
-  function onRoute() {
-    removeHeader();
-    if (isLibraryPage()) {
-      setTimeout(inject, 500);
-      setTimeout(inject, 1200);
+    if (!id) {
+      // Can't get library ID — don't intercept, let Jellyfin render natively
+      _interceptActive = false;
+      return;
     }
+
+    show(id, name, type);
   }
 
-  /* ── Count polling (cards stream in async) ───────────────── */
-  let _countPoll = null;
-  function startCountPoll() {
-    clearInterval(_countPoll);
-    let ticks = 0;
-    _countPoll = setInterval(() => {
-      refreshCount();
-      refreshSortLabel();
-      if (++ticks >= 20) clearInterval(_countPoll); // 20 × 600ms = 12s
-    }, 600);
-  }
+  /* ── Boot ───────────────────────────────────────────────── */
+  createOverlay();
 
-  /* ── Boot ────────────────────────────────────────────────── */
-  window.addEventListener("hashchange", () => { onRoute(); startCountPoll(); });
-  window.addEventListener("popstate",   () => { onRoute(); startCountPoll(); });
+  window.addEventListener('hashchange', () => {
+    _interceptActive = false;
+    if (visible) hide();
+    setTimeout(tryIntercept, 400);
+  });
 
-  // MutationObserver for SPA navigation
-  new MutationObserver(() => {
-    if (isLibraryPage() && !document.getElementById(HDR_ID)) {
-      inject();
-      startCountPoll();
-    }
-  }).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('popstate', () => {
+    setTimeout(tryIntercept, 400);
+  });
 
-  // Initial boot
-  const _boot = () => {
-    if (isLibraryPage()) { inject(); startCountPoll(); }
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => setTimeout(_boot, 600));
+  // Initial load
+  const _boot = () => setTimeout(tryIntercept, 800);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _boot);
   } else {
-    setTimeout(_boot, 600);
+    _boot();
   }
 
 })();

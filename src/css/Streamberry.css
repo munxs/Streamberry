@@ -3225,151 +3225,354 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   LIBRARY PAGE HEADER — Moonfin-style
-   Layout:
-     Row 1: [Title]  [N items]
-     Row 2: [Sort btn] [Filter btn]   ···alphabet···
+   SB LIBRARY OVERLAY — Moonfin-style
+   Full-screen overlay injected over Jellyfin's native library page
    ══════════════════════════════════════════════════════════════ */
 
-/* ── 1. Wrap the whole viewMenuBar area in a flex column ── */
-.itemsTab .viewMenuBar,
-.libraryPage .viewMenuBar {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  padding: 0.6em var(--sidePadding, 3.3%) 0.5em !important;
-  gap: 0.55em !important;
-  background: transparent !important;
-  border: none !important;
-  margin-top: 0 !important;
+.sb-library-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9000;
+  background: #141414;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
-/* ── 2. Hide the native Jellyfin inline title above the bar ── */
-.itemsTab .pageTitle,
-.itemsTab .sectionTitleContainer .pageTitle,
-.libraryPage .sectionTitleContainer .pageTitle {
-  display: none !important;
+.sb-library-overlay.sb-visible {
+  opacity: 1;
+  visibility: visible;
 }
 
-/* ── 3. Title row: inject via ::before on the viewMenuBar ──
-        We pull the library name from the page <title> via JS,
-        but the row container itself is CSS-driven.           ── */
-
-/* The title + count are injected by JS into #sbLibHdr which we
-   prepend inside .viewMenuBar — style it here */
-#sbLibHdr {
-  display: flex !important;
-  align-items: baseline !important;
-  gap: 0.5em !important;
-  width: 100% !important;
-  line-height: 1.2 !important;
-  padding: 0 !important;
-  margin: 0 !important;
+/* ── Header: Title + Count ── */
+.sb-lib-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 28px 32px 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #141414;
 }
 
-#sbLibHdr .sbLibHdrName {
-  font-size: 1.9em !important;
-  font-weight: 700 !important;
-  color: var(--textColor) !important;
-  letter-spacing: -0.015em !important;
+.sb-lib-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #e5e5e5;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
-#sbLibHdr .sbLibHdrCount {
-  font-size: 0.95em !important;
-  font-weight: 400 !important;
-  color: var(--dimTextColor) !important;
+.sb-lib-count {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
-/* ── 4. Controls row: sort+filter LEFT, alphabet RIGHT ── */
-#sbLibControls {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  gap: 0.5em !important;
-  flex-wrap: nowrap !important;
+/* ── Toolbar: Sort + Filter + Alphabet ── */
+.sb-lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px 10px;
+  flex-wrap: nowrap;
 }
 
-/* Left cluster */
-#sbLibControls .sbLibLeft {
-  display: flex !important;
-  align-items: center !important;
-  gap: 0.45em !important;
-  flex-shrink: 0 !important;
+.sb-lib-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #e5e5e5;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: "Inter", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Right cluster — alphabet */
-#sbLibControls .sbLibRight {
-  display: flex !important;
-  align-items: center !important;
-  gap: 0.18em !important;
-  flex-wrap: wrap !important;
-  justify-content: flex-end !important;
+.sb-lib-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
-/* ── 5. Sort / Filter buttons — pill style matching target ── */
-#sbLibControls .sbLibBtn {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 0.35em !important;
-  background: rgba(255,255,255,0.08) !important;
-  border: 1px solid rgba(255,255,255,0.14) !important;
-  border-radius: 0.4em !important;
-  color: var(--textColor) !important;
-  font-family: "Inter", sans-serif !important;
-  font-size: 0.82em !important;
-  font-weight: 500 !important;
-  padding: 0.38em 0.75em !important;
-  cursor: pointer !important;
-  white-space: nowrap !important;
-  transition: background 0.15s, border-color 0.15s !important;
-  line-height: 1.4 !important;
-  -webkit-tap-highlight-color: transparent !important;
+.sb-lib-btn .material-icons {
+  font-size: 17px;
+  line-height: 1;
 }
 
-#sbLibControls .sbLibBtn .material-icons {
-  font-size: 1em !important;
-  line-height: 1 !important;
+/* ── Alphabet nav ── */
+.sb-lib-alpha-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  flex: 1;
+  justify-content: flex-end;
 }
 
-#sbLibControls .sbLibBtn:hover {
-  background: rgba(255,255,255,0.14) !important;
-  border-color: rgba(255,255,255,0.26) !important;
+.sb-lib-alpha-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: "Inter", sans-serif;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* ── 6. Alphabet letters ── */
-#sbLibControls .sbLibAlpha {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-width: 1.45em !important;
-  height: 1.55em !important;
-  font-size: 0.78em !important;
-  font-weight: 500 !important;
-  color: var(--dimTextColor) !important;
-  border-radius: 0.3em !important;
-  cursor: pointer !important;
-  padding: 0 0.1em !important;
-  background: transparent !important;
-  border: none !important;
-  transition: color 0.12s, background 0.12s !important;
-  -webkit-tap-highlight-color: transparent !important;
+.sb-lib-alpha-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
-#sbLibControls .sbLibAlpha:hover,
-#sbLibControls .sbLibAlpha.sbLibAlpha--active {
-  color: var(--textColor) !important;
-  background: rgba(255,255,255,0.10) !important;
+.sb-lib-alpha-btn.sb-active {
+  background: var(--accent, rgb(229, 9, 20));
+  color: #fff;
 }
 
-/* ── 7. Hide the original native controls we've replaced ── */
-.itemsTab .viewMenuBar > *:not(#sbLibHdr):not(#sbLibControls),
-.libraryPage .viewMenuBar > *:not(#sbLibHdr):not(#sbLibControls) {
-  display: none !important;
+/* ── Grid ── */
+.sb-lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 20px;
+  padding: 12px 32px 40px;
 }
 
-/* ── 8. Reduce top gap so header sits flush ── */
-.itemsTab .padded-top,
-.libraryPage .padded-top {
-  padding-top: 0 !important;
+/* ── Card ── */
+.sb-lib-card {
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: visible;
+  transition: transform 0.2s ease;
+}
+
+.sb-lib-card:hover {
+  transform: scale(1.04);
+}
+
+.sb-lib-card:hover .sb-lib-card-img {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.sb-lib-card-poster {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sb-lib-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+  display: block;
+}
+
+.sb-lib-card-no-img {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.sb-lib-card-no-img .material-icons {
+  font-size: 48px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* Type badge */
+.sb-lib-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+}
+
+.sb-lib-badge--movie  { background: rgba(0, 164, 220, 0.88); }
+.sb-lib-badge--series { background: rgba(112, 76, 215, 0.88); }
+
+/* Card info */
+.sb-lib-card-info {
+  padding: 7px 2px 0;
+}
+
+.sb-lib-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e5e5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "Inter", sans-serif;
+}
+
+.sb-lib-card-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+  font-family: "Inter", sans-serif;
+}
+
+/* ── States ── */
+.sb-lib-loading,
+.sb-lib-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: "Inter", sans-serif;
+}
+
+.sb-lib-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--accent, rgb(229, 9, 20));
+  border-radius: 50%;
+  animation: sb-spin 0.75s linear infinite;
+}
+
+@keyframes sb-spin { to { transform: rotate(360deg); } }
+
+/* ── Dropdown modal ── */
+.sb-lib-dropdown {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.sb-lib-dropdown.sb-visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.sb-lib-dropdown-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.sb-lib-dropdown-box {
+  position: relative;
+  background: rgba(25, 25, 35, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 14px;
+  padding: 22px 28px;
+  min-width: 240px;
+  max-width: 90vw;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.sb-lib-dropdown-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 14px;
+  text-align: center;
+  font-family: "Inter", sans-serif;
+}
+
+.sb-lib-dropdown-opt {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: "Inter", sans-serif;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  margin-top: 3px;
+}
+
+.sb-lib-dropdown-opt:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+.sb-lib-dropdown-opt.sb-active {
+  background: var(--accent, rgb(229, 9, 20));
+  color: #fff;
+}
+
+/* ── Load more ── */
+.sb-lib-load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .sb-lib-header  { padding: 18px 20px 0; }
+  .sb-lib-toolbar { padding: 10px 20px 8px; }
+  .sb-lib-grid    { padding: 10px 20px 32px; gap: 14px;
+                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .sb-lib-title   { font-size: 22px; }
+  .sb-lib-alpha-nav { display: none; }
+}
+
+@media (min-width: 1400px) {
+  .sb-lib-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
+}
+
+@media (min-width: 1920px) {
+  .sb-lib-header  { padding: 32px 48px 0; }
+  .sb-lib-toolbar { padding: 16px 48px 12px; }
+  .sb-lib-grid    { padding: 12px 48px 48px; gap: 24px;
+                    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
