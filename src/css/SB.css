@@ -1,11 +1,11 @@
-/* Streamberry — Streaming Theme (Netflix × Crunchyroll) v25.12.31 */
+/* SB — Streaming Theme (Netflix × Crunchyroll) v25.12.31 */
 /* Optimized: consolidated rules, removed redundancy, reduced specificity wars */
 
 /* Inter: loaded via JS */
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
-  --streamberryFooterText: "STREAMBERRY";
+  --SBFooterText: "SB";
   color-scheme: dark;
 
   /* Core Palette — Netflix black + Crunchyroll orange-red */
@@ -176,7 +176,7 @@ body {
 
 #myPreferencesMenuPage > div::after,
 .dashboardFooter::after {
-  content: var(--streamberryFooterText);
+  content: var(--SBFooterText);
   font-size: 0.8em;
   color: var(--borderColor);
   display: inline-grid;
@@ -1934,7 +1934,7 @@ a.elsewhere-link-reset {
 
 
 /* ═══════════════════════════════════════════════════════════════
-   ── Streamberry Mobile Bottom Navigation Bar v4 ───────────────
+   ── SB Mobile Bottom Navigation Bar v4 ───────────────
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Variables ───────────────────────────────────────────────── */
@@ -2425,7 +2425,7 @@ body.sbJellyseerrOpen { overflow: hidden !important; }
 
 
 /* ═══════════════════════════════════════════════════════════
-   STREAMBERRY ADMIN SETTINGS MODAL
+   SB ADMIN SETTINGS MODAL
    ═══════════════════════════════════════════════════════════ */
 
 #sbAdminGear {
@@ -2615,7 +2615,7 @@ body.sbJellyseerrOpen { overflow: hidden !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   STREAMBERRY MEDIA BAR v2
+   SB MEDIA BAR v2
    Full-bleed behind the transparent header, Moonfin-style.
    ═══════════════════════════════════════════════════════════ */
 
@@ -2697,7 +2697,7 @@ body:has(.homePage:not(.hide))  .page,
   padding-top: var(--appBarHeight, 4em);
 }
 
-/* Mobile: --appBarHeight is 5em by default in Streamberry.
+/* Mobile: --appBarHeight is 5em by default in SB.
    The bottom nav bar (sbBottomNav) doesn't affect the top, but we
    confirm the top offset matches the actual skinHeader height.     */
 .layout-mobile #sbMediaBar {
@@ -3195,7 +3195,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 /* Header logo — Jellyfin sets it as a CSS background on this class */
 .pageTitleWithDefaultLogo,
 .pageTitleWithLogo {
-  background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
+  background-image: url("https://cdn.jsdelivr.net/gh/munxs/SB@main/src/logo/sb_logo.png") !important;
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: left center !important;
@@ -3213,7 +3213,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   display: block !important;
   width: 12em !important;
   height: 4em !important;
-  background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
+  background-image: url("https://cdn.jsdelivr.net/gh/munxs/SB@main/src/logo/sb_logo.png") !important;
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: center !important;

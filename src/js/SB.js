@@ -1,5 +1,5 @@
 /**
- * Streamberry — Bottom Navigation Bar v5
+ * SB — Bottom Navigation Bar v5
  * Inject via Jellyfin Dashboard → General → Custom JavaScript
  *
  * ── CDN INJECTION (Jellyfin Branding → Custom JS) ────────────
@@ -7,14 +7,14 @@
  *
  *   (function() {
  *     var s = document.createElement('script');
- *     s.src = 'https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/js/Streamberry.js';
+ *     s.src = 'https://cdn.jsdelivr.net/gh/munxs/SB@main/src/js/SB.js';
  *     s.async = false;
  *     document.head.appendChild(s);
  *   })();
  *
  * CDN cache note: jsDelivr caches for 24h. After pushing a new file,
  * use the purge URL to bust the cache:
- *   https://purge.jsdelivr.net/gh/munxs/Streamberry@main/src/js/Streamberry.js
+ *   https://purge.jsdelivr.net/gh/munxs/SB@main/src/js/SB.js
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -36,7 +36,7 @@
 
 /* ── CSS injected as <link> tag — works on login page too ── */
 (function () {
-  var href = "https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/css/Streamberry.css";
+  var href = "https://cdn.jsdelivr.net/gh/munxs/SB@main/src/css/SB.css";
   if (!document.querySelector('link[href="' + href + '"]')) {
     var l = document.createElement("link");
     l.rel = "stylesheet";
@@ -47,8 +47,8 @@
 
 /* ── Custom logo + favicon ── */
 (function () {
-  var FAVICON = "https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_favicon.png";
-  var LOGO    = "https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png";
+  var FAVICON = "https://cdn.jsdelivr.net/gh/munxs/SB@main/src/logo/sb_favicon.png";
+  var LOGO    = "https://cdn.jsdelivr.net/gh/munxs/SB@main/src/logo/sb_logo.png";
 
   /* ── Favicon ── */
   function setFavicon() {
@@ -359,7 +359,7 @@
     }, 50);
   }
 
-  /* ── Streamberry Config — server-backed via Branding API ─── */
+  /* ── SB Config — server-backed via Branding API ─── */
   const SB_TAG = "[[sb-config]]";
   const SB_CACHE_KEY = "sb_config_cache";
 
@@ -451,7 +451,7 @@
       onSuccess && onSuccess();
     })
     .catch(err => {
-      console.error("[Streamberry] Config save failed:", err);
+      console.error("[SB] Config save failed:", err);
       onError && onError();
     });
   }
@@ -495,7 +495,7 @@
     if (!panel) return;
     const gear = document.createElement("button");
     gear.id = "sbAdminGear";
-    gear.title = "Streamberry Settings";
+    gear.title = "SB Settings";
     gear.innerHTML = '<span class="material-icons">tune</span>';
     gear.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -513,7 +513,7 @@
     modal.innerHTML = `
       <div id="sbSettingsDialog">
         <div id="sbSettingsHeader">
-          <span>Streamberry Settings</span>
+          <span>SB Settings</span>
           <button id="sbSettingsClose" aria-label="Close">
             <span class="material-icons">close</span>
           </button>
@@ -594,7 +594,7 @@
       if (isAdmin()) {
         closeMore();
         setTimeout(openSbSettings, 50);
-        showSbToast("Set your Jellyseerr URL in Streamberry Settings first.");
+        showSbToast("Set your Jellyseerr URL in SB Settings first.");
       } else {
         showSbToast("Requests are not configured yet. Ask your admin.");
       }
@@ -1072,7 +1072,7 @@
 })();
 
 /* ═══════════════════════════════════════════════════════════
-   STREAMBERRY MEDIA BAR — Featured Content Carousel v2
+   SB MEDIA BAR — Featured Content Carousel v2
    Full-bleed behind header, exactly like Moonfin.
    No plugin dependency. Works on desktop, mobile, TV clients.
    ═══════════════════════════════════════════════════════════ */
@@ -1552,7 +1552,7 @@
       total = data.TotalRecordCount || 0;
       items = reset ? (data.Items || []) : items.concat(data.Items || []);
     } catch(e) {
-      console.error('[Streamberry] fetchItems error:', e);
+      console.error('[SB] fetchItems error:', e);
     }
 
     loading = false;
