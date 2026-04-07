@@ -3195,7 +3195,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
 /* Header logo — Jellyfin sets it as a CSS background on this class*/
 .pageTitleWithDefaultLogo,
 .pageTitleWithLogo {
-  background-image: url("https://cdn.jsdelivr.net/gh/munxs/SB/src/logo/sb_logo.png") !important;
+  background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: left center !important;
@@ -3213,7 +3213,7 @@ body:has(#loginPage:not(.hide)) #sbPillNav { display: none !important; }
   display: block !important;
   width: 12em !important;
   height: 4em !important;
-  background-image: url("https://cdn.jsdelivr.net/gh/munxs/SB/src/logo/sb_logo.png") !important;
+  background-image: url("https://cdn.jsdelivr.net/gh/munxs/Streamberry@main/src/logo/sb_logo.png") !important;
   background-size: contain !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
