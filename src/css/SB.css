@@ -8,70 +8,72 @@
   --SBFooterText: "SB";
   color-scheme: dark;
 
-  /* Core Palette — Netflix black + Crunchyroll orange-red */
-  --red:          rgb(229, 9, 20);        /* Netflix red */
-  --orange:       rgb(255, 120, 0);       /* Crunchyroll orange */
-  --accent:       rgb(229, 9, 20);        /* primary accent */
-  --accentAlpha:  rgba(229, 9, 20, 0.85);
-  --accentGlow:   rgba(229, 9, 20, 0.25);
-  --activeColor:  rgb(229, 9, 20);
-  --activeColorAlpha: rgba(229, 9, 20, 0.9);
+  /* 🎨 Strimbera Palette */
+  --StrimberaNavy: #1A2A49;
+  --StrimberaBlue: #4EC5F1;
+  --StrimberaTeal: #3BC6C6;
+  --StrimberaMid:  #3E5E5E;
+  --StrimberaBg:   #0E1A2E;
+  --StrimberaCard: #121E38;
 
-  /* Backgrounds — near-pure black */
-  --darkerGradientPoint:      #0a0a0a;
-  --darkerGradientPointAlpha: rgba(10, 10, 10, 0.92);
-  --lighterGradientPoint:     #141414;
-  --lighterGradientPointAlpha: rgba(20, 20, 20, 0.85);
-  --gradientPointAlpha:       rgba(20, 20, 20, 0.4);
+  /* Core Palette (replaced) */
+  --red:          var(--StrimberaBlue);
+  --orange:       var(--StrimberaTeal);
+  --accent:       var(--StrimberaBlue);
+  --accentAlpha:  rgba(78, 197, 241, 0.85);
+  --accentGlow:   rgba(78, 197, 241, 0.25);
+  --activeColor:  var(--StrimberaTeal);
+  --activeColorAlpha: rgba(59, 198, 198, 0.9);
+
+  /* Backgrounds */
+  --darkerGradientPoint:      var(--StrimberaBg);
+  --darkerGradientPointAlpha: rgba(14, 26, 46, 0.92);
+  --lighterGradientPoint:     var(--StrimberaNavy);
+  --lighterGradientPointAlpha: rgba(26, 42, 73, 0.85);
+  --gradientPointAlpha:       rgba(26, 42, 73, 0.4);
 
   /* Surfaces */
-  --headerColor:   rgba(10, 10, 10, 0.92);
-  --drawerColor:   rgba(14, 14, 14, 0.96);
-  --tableBodyColor: rgb(20 20 20);
-  --selectorBackgroundColor:      rgb(38, 38, 38);
-  --selectorBackgroundColorAlpha: rgba(38, 38, 38, 0.6);
+  --headerColor:   rgba(14, 26, 46, 0.92);
+  --drawerColor:   rgba(18, 30, 56, 0.96);
+  --tableBodyColor: var(--StrimberaCard);
+  --selectorBackgroundColor:      var(--StrimberaMid);
+  --selectorBackgroundColorAlpha: rgba(62, 94, 94, 0.6);
 
   /* Borders */
-  --borderColor:        hsl(0, 0%, 22%);
-  --darkerBorderColor:  hsl(0, 0%, 14%);
-  --lighterBorderColor: hsla(0, 0%, 100%, 0.15);
-  --borderWidth:        0.06em;
-  --borderWidthDouble:  0.12em;
-  --defaultBorder:      var(--borderWidth) solid var(--borderColor);
-  --defaultLighterBorder: var(--borderWidth) solid var(--lighterBorderColor);
+  --borderColor:        rgba(78, 197, 241, 0.25);
+  --darkerBorderColor:  rgba(14, 26, 46, 0.8);
+  --lighterBorderColor: rgba(255, 255, 255, 0.15);
 
   /* Text */
-  --textColor:    rgb(229, 229, 229);
-  --dimTextColor: rgb(128, 128, 128);
+  --textColor:    rgb(230, 240, 255);
+  --dimTextColor: rgb(140, 160, 180);
 
   /* OSD */
   --osdSeekBarPlayedColor:        var(--accent);
-  --osdSeekBarBufferedColorAlpha: rgba(128, 128, 128, 0.4);
+  --osdSeekBarBufferedColorAlpha: rgba(140, 160, 180, 0.4);
   --osdSeekBarThumbColor:         white;
 
   /* Buttons */
-  --btnMiniPlayColor:       rgb(229, 9, 20);
-  --btnMiniPlayBorderColor: rgb(255, 60, 60);
-  --btnDeleteColor:         rgb(185, 28, 28);
-  --btnDeleteBorderColor:   rgb(239, 68, 68);
-  --btnSubmitColor:         rgb(180, 10, 20);
-  --btnSubmitBorderColor:   rgb(229, 9, 20);
-  --checkboxCheckedBgColor: rgb(229, 9, 20);
-  --highlightOutlineColor:  rgb(229, 9, 20);
-  --uiAccentColor:          rgb(229, 9, 20);
+  --btnMiniPlayColor:       var(--StrimberaBlue);
+  --btnMiniPlayBorderColor: var(--StrimberaTeal);
+  --btnDeleteColor:         #b91c1c;
+  --btnDeleteBorderColor:   #ef4444;
+  --btnSubmitColor:         var(--StrimberaBlue);
+  --btnSubmitBorderColor:   var(--StrimberaTeal);
+  --checkboxCheckedBgColor: var(--StrimberaBlue);
+  --highlightOutlineColor:  var(--StrimberaBlue);
+  --uiAccentColor:          var(--StrimberaBlue);
 
   /* Gradients */
-  --backgroundGradient:     linear-gradient(0deg, var(--darkerGradientPoint) 35%, var(--lighterGradientPoint));
-  --cardBackgroundGradient: linear-gradient(0deg, var(--darkerGradientPoint), 25%, var(--lighterGradientPoint));
-  --headerColorGradient:    linear-gradient(180deg, rgba(10,10,10,.98) 30%, 55%, transparent 90%);
-  --headerColorGradientAlt: linear-gradient(180deg, rgba(10,10,10,1), 70%, transparent);
-  --headerBlurMask:         linear-gradient(180deg, white 50%, 85%, transparent);
-  --cardFooterGradient:     linear-gradient(0deg, rgb(0 0 0 / 95%), 40%, transparent);
-  --topOSDGradient:         linear-gradient(180deg, hsla(0,0%,0%,.85), 45%, hsla(0,0%,0%,0));
-  --bottomOSDGradient:      linear-gradient(0deg, hsla(0,0%,0%,.85), 45%, hsla(0,0%,0%,0));
-  --hoverGradientV:         linear-gradient(0deg, transparent, rgb(255 255 255 / 100%) 45%, rgb(255 255 255 / 100%) 55%, transparent);
-  --hoverGradientH:         linear-gradient(90deg, transparent, rgb(255 255 255 / 100%) 45%, rgb(255 255 255 / 100%) 55%, transparent);
-  --itemBackdropMask:       linear-gradient(180deg, rgba(0,0,0,.8), 75%, transparent);
+  --backgroundGradient:     linear-gradient(0deg, var(--StrimberaBg) 35%, var(--StrimberaNavy));
+  --cardBackgroundGradient: linear-gradient(0deg, var(--StrimberaBg), 25%, var(--StrimberaNavy));
+  --headerColorGradient:    linear-gradient(180deg, rgba(14,26,46,.98) 30%, 55%, transparent 90%);
+  --headerColorGradientAlt: linear-gradient(180deg, rgba(14,26,46,1), 70%, transparent);
+
+  /* Accent hover effects */
+  --hoverGradientV: linear-gradient(0deg, transparent, rgba(78,197,241,1) 45%, rgba(78,197,241,1) 55%, transparent);
+  --hoverGradientH: linear-gradient(90deg, transparent, rgba(78,197,241,1) 45%, rgba(78,197,241,1) 55%, transparent);
+}
 
   /* Radius & Spacing */
   --largerRadius:  1.25em;
